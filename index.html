@@ -321,7 +321,9 @@
             <select id="assignContactSelect"></select>
           </label>
           <button class="primary" onclick="confirmAssignSlot()">Add option</button>
+          <button class="confirm" onclick="confirmAssignConfirmed()">Add confirmed</button>
         </div>
+        <div class="hint" style="margin-top:8px;">Adding a confirmed slot will archive all other proposed options for that contact.</div>
       </div>
     </div>
   </div>
@@ -787,6 +789,43 @@
       save();
     }
 
+    closeAssignModal();
+    render();
+  }
+
+  function confirmAssignConfirmed() {
+    const cid = document.getElementById('assignContactSelect').value;
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    addConfirmedSlotToContact(c, assignModal.slot);
+  }
+
+  function addConfirmedSlotToContact(contact, slot) {
+    if (!contact || !slot) return;
+    const existing = contact.options.find(o => o.startISO === slot.startISO);
+
+    if (existing) {
+      existing.status = 'confirmed';
+    } else {
+      contact.options.push({
+        id: crypto.randomUUID(),
+        startISO: slot.startISO,
+        endISO: slot.endISO,
+        status: 'confirmed'
+      });
+    }
+
+    const archived = [];
+    contact.options = contact.options.filter(o => {
+      if (o.status === 'proposed') {
+        archived.push({ ...o, status: 'removed', archivedAt: new Date().toISOString() });
+        return false;
+      }
+      return true;
+    });
+    contact.archivedOptions.push(...archived);
+
+    save();
     closeAssignModal();
     render();
   }
