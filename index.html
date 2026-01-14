@@ -361,6 +361,17 @@
       // Basic normalization
       parsed.contacts.forEach(c => {
         c.options = Array.isArray(c.options) ? c.options : [];
+        c.archivedOptions = Array.isArray(c.archivedOptions) ? c.archivedOptions : [];
+        const activeOptions = [];
+        c.options.forEach(o => {
+          if (!o.status) o.status = 'proposed';
+          if (o.status === 'removed') {
+            c.archivedOptions.push({ ...o, status: 'removed' });
+          } else {
+            activeOptions.push(o);
+          }
+        });
+        c.options = activeOptions;
       });
       return parsed;
     } catch {
@@ -391,7 +402,7 @@
     const name = prompt("Contact name:");
     if (!name) return;
     const email = prompt("Email (optional):") || "";
-    const contact = { id: crypto.randomUUID(), name: name.trim(), email: email.trim(), options: [] };
+    const contact = { id: crypto.randomUUID(), name: name.trim(), email: email.trim(), options: [], archivedOptions: [] };
     state.contacts.push(contact);
     save();
     // Pop up slot picker right after adding
@@ -407,29 +418,49 @@
     save(); render();
   }
 
-  function setOptionStatus(cid, oid, status) {
-    const c = state.contacts.find(x => x.id === cid);
-    if (!c) return;
-    const o = c.options.find(x => x.id === oid);
-    if (!o) return;
-    o.status = status;
-    save(); render();
-  }
-
   function confirmOption(cid, oid) {
     const c = state.contacts.find(x => x.id === cid);
     if (!c) return;
-    c.options.forEach(o => {
-      if (o.id === oid) o.status = "confirmed";
-      else if (o.status === "proposed") o.status = "removed";
+    const archived = [];
+    c.options = c.options.filter(o => {
+      if (o.id === oid) {
+        o.status = "confirmed";
+        return true;
+      }
+      if (o.status === "proposed") {
+        archived.push({ ...o, status: "removed", archivedAt: new Date().toISOString() });
+        return false;
+      }
+      return true;
     });
+    c.archivedOptions.push(...archived);
     save(); render();
   }
 
-  function purgeRemoved(cid) {
+  function archiveOption(cid, oid) {
     const c = state.contacts.find(x => x.id === cid);
     if (!c) return;
-    c.options = c.options.filter(o => o.status !== 'removed');
+    const idx = c.options.findIndex(o => o.id === oid);
+    if (idx === -1) return;
+    const [removed] = c.options.splice(idx, 1);
+    c.archivedOptions.push({ ...removed, status: 'removed', archivedAt: new Date().toISOString() });
+    save(); render();
+  }
+
+  function restoreArchivedOption(cid, oid) {
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    const idx = c.archivedOptions.findIndex(o => o.id === oid);
+    if (idx === -1) return;
+    const [restored] = c.archivedOptions.splice(idx, 1);
+    c.options.push({ ...restored, status: 'proposed' });
+    save(); render();
+  }
+
+  function deleteArchivedOption(cid, oid) {
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    c.archivedOptions = c.archivedOptions.filter(o => o.id !== oid);
     save(); render();
   }
 
@@ -861,35 +892,26 @@
               const btnC = document.createElement('button');
               btnC.className = 'confirm small';
               btnC.textContent = 'Confirm';
-              btnC.title = 'Mark this as confirmed (other proposed options for this contact become removed)';
+              btnC.title = 'Mark this as confirmed (other proposed options for this contact are archived)';
               btnC.onclick = () => confirmOption(c.id, o.id);
               actions.appendChild(btnC);
-            }
-
-            if (o.status !== 'removed') {
-              const btnR = document.createElement('button');
-              btnR.className = 'small';
-              btnR.textContent = 'Remove';
-              btnR.onclick = () => setOptionStatus(c.id, o.id, 'removed');
-              actions.appendChild(btnR);
             } else {
               const btnU = document.createElement('button');
               btnU.className = 'small';
-              btnU.textContent = 'Undo';
-              btnU.onclick = () => setOptionStatus(c.id, o.id, 'proposed');
+              btnU.textContent = 'Unconfirm';
+              btnU.onclick = () => { o.status = 'proposed'; save(); render(); };
               actions.appendChild(btnU);
             }
+
+            const btnR = document.createElement('button');
+            btnR.className = 'small';
+            btnR.textContent = 'Archive';
+            btnR.onclick = () => archiveOption(c.id, o.id);
+            actions.appendChild(btnR);
 
             div.appendChild(actions);
             td.appendChild(div);
           });
-
-          const purgeBtn = document.createElement('button');
-          purgeBtn.className = 'small';
-          purgeBtn.textContent = 'Purge removed';
-          purgeBtn.title = 'Delete all removed options for this contact';
-          purgeBtn.onclick = () => purgeRemoved(c.id);
-          td.appendChild(purgeBtn);
         }
 
         tr.appendChild(td);
@@ -1016,13 +1038,13 @@
         const unconfirm = document.createElement('button');
         unconfirm.className = 'small';
         unconfirm.textContent = 'Unconfirm';
-        unconfirm.onclick = () => setOptionStatus(item.c.id, item.o.id, 'proposed');
+        unconfirm.onclick = () => { item.o.status = 'proposed'; save(); render(); };
         actions.appendChild(unconfirm);
 
         const remove = document.createElement('button');
         remove.className = 'small';
-        remove.textContent = 'Remove';
-        remove.onclick = () => setOptionStatus(item.c.id, item.o.id, 'removed');
+        remove.textContent = 'Archive';
+        remove.onclick = () => archiveOption(item.c.id, item.o.id);
         actions.appendChild(remove);
 
         div.appendChild(actions);
@@ -1054,7 +1076,7 @@
         total: (c.options || []).length,
         proposed: (c.options || []).filter(o => o.status === 'proposed').length,
         confirmed: (c.options || []).filter(o => o.status === 'confirmed').length,
-        removed: (c.options || []).filter(o => o.status === 'removed').length,
+        archived: (c.archivedOptions || []).length,
       };
 
       box.innerHTML = `
@@ -1065,14 +1087,62 @@
           </div>
           <div class="row">
             <button class="small" onclick="openSlotModal('${c.id}')">Pick options</button>
-            <button class="small" onclick="purgeRemoved('${c.id}')">Purge removed</button>
             <button class="small danger" onclick="deleteContact('${c.id}')">Delete</button>
           </div>
         </div>
-        <div class="hint" style="margin-top:8px;">Total: ${counts.total} · Proposed: ${counts.proposed} · Confirmed: ${counts.confirmed} · Removed: ${counts.removed}</div>
+        <div class="hint" style="margin-top:8px;">Total: ${counts.total} · Proposed: ${counts.proposed} · Confirmed: ${counts.confirmed} · Archived: ${counts.archived}</div>
       `;
 
       list.appendChild(box);
+
+      if ((c.archivedOptions || []).length) {
+        const archiveWrap = document.createElement('div');
+        archiveWrap.style.marginTop = '10px';
+
+        const title = document.createElement('div');
+        title.className = 'hint';
+        title.textContent = 'Archived options (auto-archived after confirmation).';
+        archiveWrap.appendChild(title);
+
+        const archivedList = document.createElement('div');
+        archivedList.style.marginTop = '8px';
+
+        c.archivedOptions
+          .slice()
+          .sort((a,b) => new Date(a.startISO) - new Date(b.startISO))
+          .forEach(o => {
+            const s = new Date(o.startISO);
+            const e = new Date(o.endISO);
+            const row = document.createElement('div');
+            row.className = 'option';
+            row.innerHTML = `
+              <div style="font-weight:800;">${fmtDay(s)} · ${fmtTime(s)}–${fmtTime(e)}
+                <span class="status removed">archived</span>
+              </div>
+            `;
+
+            const actions = document.createElement('div');
+            actions.className = 'optionActions';
+
+            const restore = document.createElement('button');
+            restore.className = 'small';
+            restore.textContent = 'Restore';
+            restore.onclick = () => restoreArchivedOption(c.id, o.id);
+            actions.appendChild(restore);
+
+            const discard = document.createElement('button');
+            discard.className = 'small danger';
+            discard.textContent = 'Delete';
+            discard.onclick = () => deleteArchivedOption(c.id, o.id);
+            actions.appendChild(discard);
+
+            row.appendChild(actions);
+            archivedList.appendChild(row);
+          });
+
+        archiveWrap.appendChild(archivedList);
+        box.appendChild(archiveWrap);
+      }
     });
 
     card.appendChild(list);
