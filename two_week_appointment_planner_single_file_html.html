@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Appointment Planner (2 Weeks)</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --card: #ffffff;
+      --border: #e4e4e7;
+      --text: #18181b;
+      --muted: #71717a;
+      --primary: #18181b;
+      --accent: #059669;
+      --danger: #dc2626;
+      --warning: #b45309;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    header {
+      padding: 16px;
+      border-bottom: 1px solid var(--border);
+      background: var(--card);
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    h1 { margin: 0 0 4px 0; font-size: 22px; }
+    header p { margin: 0; font-size: 13px; color: var(--muted); }
+
+    main { padding: 16px; max-width: 1200px; margin: 0 auto; }
+
+    .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+    button {
+      border: 1px solid var(--border);
+      background: var(--card);
+      padding: 6px 10px;
+      border-radius: 10px;
+      cursor: pointer;
+      font-size: 13px;
+    }
+    button.primary { background: var(--primary); color: white; border-color: #111; }
+    button.confirm { background: var(--accent); color: white; border-color: #047857; }
+    button.danger { background: var(--danger); color: white; border-color: #b91c1c; }
+    button.ghost { background: transparent; }
+    button.small { padding: 4px 8px; font-size: 12px; border-radius: 9px; }
+    button:hover { opacity: 0.92; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    input, select {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 10px;
+      font-size: 14px;
+      background: white;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 12px;
+      margin-bottom: 12px;
+    }
+
+    .scroll-x { overflow-x: auto; }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      min-width: 980px;
+    }
+
+    th, td {
+      border: 1px solid var(--border);
+      padding: 10px;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f4f4f5;
+      text-align: left;
+      font-size: 13px;
+    }
+
+    .dayCell {
+      width: 220px;
+      background: #fafafa;
+      font-weight: 600;
+      position: sticky;
+      left: 0;
+      z-index: 2;
+    }
+
+    tr.weekBreak td, tr.weekBreak th {
+      border-top: 3px solid #cbd5e1;
+    }
+
+    .weekLabel {
+      display: inline-flex;
+      gap: 8px;
+      align-items: baseline;
+    }
+
+    .weekPill {
+      font-size: 11px;
+      color: white;
+      background: #334155;
+      border-radius: 999px;
+      padding: 2px 8px;
+      font-weight: 700;
+    }
+
+    .status {
+      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 999px;
+      display: inline-block;
+      margin-left: 6px;
+      font-weight: 600;
+    }
+    .proposed { background: #dbeafe; color: #1e40af; }
+    .confirmed { background: #d1fae5; color: #065f46; }
+    .removed { background: #f4f4f5; color: #71717a; }
+
+    .option {
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 8px;
+      margin-bottom: 8px;
+      font-size: 13px;
+      background: white;
+    }
+
+    .optionActions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+
+    .hint { font-size: 12px; color: var(--muted); }
+
+    /* Modal */
+    .modalOverlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.45);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 50;
+    }
+    .modal {
+      width: 100%;
+      max-width: 760px;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.22);
+      overflow: hidden;
+    }
+    .modalHeader {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: #fcfcfd;
+    }
+    .modalHeader h2 { margin: 0; font-size: 16px; }
+    .modalBody { padding: 14px; }
+
+    .gridDays {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .gridTimes {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 8px;
+      margin-top: 10px;
+    }
+
+    .slotBtn {
+      width: 100%;
+      text-align: center;
+      padding: 8px 10px;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      background: white;
+      font-weight: 600;
+    }
+    .slotBtn.selected {
+      background: #111827;
+      color: white;
+      border-color: #111827;
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      padding: 6px 10px;
+      background: white;
+      font-size: 12px;
+      margin-right: 6px;
+      margin-bottom: 6px;
+    }
+
+    .divider {
+      height: 1px;
+      background: var(--border);
+      margin: 12px 0;
+    }
+
+    .subtle {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 14px;
+      padding: 12px;
+    }
+
+    .conflict {
+      font-size: 12px;
+      color: var(--warning);
+      font-weight: 600;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Appointment Planner</h1>
+    <p>Offer 3 time options per contact, confirm one, and keep a clean 2‑week overview (Mon–Fri, 09:00–14:00).</p>
+    <div class="row tabs" style="margin-top:10px;">
+      <button class="active" id="tab_calendar" onclick="setView('calendar')">Calendar</button>
+      <button id="tab_availability" onclick="setView('availability')">Available slots</button>
+      <button id="tab_confirmed" onclick="setView('confirmed')">Confirmed</button>
+      <button class="primary" onclick="addContact()">+ Add contact</button>
+      <button class="ghost" onclick="resetAll()" title="Clears data from this browser">Reset</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="app"></div>
+  </main>
+
+  <!-- Slot Picker Modal -->
+  <div class="modalOverlay" id="slotModalOverlay" onclick="onModalOverlayClick(event)">
+    <div class="modal" onclick="event.stopPropagation()">
+      <div class="modalHeader">
+        <div>
+          <h2 id="slotModalTitle">Pick up to 3 options</h2>
+          <div class="hint" id="slotModalSubtitle">Choose a weekday, then select 30‑minute slots from 09:00–14:00.</div>
+        </div>
+        <div class="row">
+          <button class="small" onclick="closeSlotModal()">✕</button>
+        </div>
+      </div>
+      <div class="modalBody">
+        <div class="subtle">
+          <div class="row" style="justify-content: space-between;">
+            <div style="font-weight:700;">Step 1: pick a day</div>
+            <div class="hint">Only weekdays (Mon–Fri) are shown.</div>
+          </div>
+          <div class="divider"></div>
+          <div id="dayPicker"></div>
+        </div>
+
+        <div class="divider"></div>
+
+        <div class="subtle" id="timeStep" style="display:none;">
+          <div class="row" style="justify-content: space-between;">
+            <div style="font-weight:700;">Step 2: pick up to 3 times</div>
+            <div class="hint" id="pickedDayLabel"></div>
+          </div>
+          <div class="divider"></div>
+          <div id="timePicker"></div>
+          <div class="divider"></div>
+          <div>
+            <div class="hint" style="margin-bottom:6px;">Selected:</div>
+            <div id="selectedChips"></div>
+            <div class="row" style="justify-content: flex-end; margin-top: 10px;">
+              <button onclick="clearSelections()">Clear</button>
+              <button class="primary" id="saveSelectionsBtn" onclick="saveSelections()">Add options</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:10px;">Tip: You can open this picker anytime from the contact column header.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Assign Modal (Availability → Add to contact) -->
+  <div class="modalOverlay" id="assignModalOverlay" onclick="onAssignOverlayClick(event)">
+    <div class="modal" onclick="event.stopPropagation()" style="max-width:520px;">
+      <div class="modalHeader">
+        <div>
+          <h2>Add this slot as an option</h2>
+          <div class="hint" id="assignSlotLabel"></div>
+        </div>
+        <button class="small" onclick="closeAssignModal()">✕</button>
+      </div>
+      <div class="modalBody">
+        <div class="row" style="gap:10px; align-items:flex-end;">
+          <label style="display:grid; gap:6px; flex: 1;">
+            <span class="hint">Choose contact</span>
+            <select id="assignContactSelect"></select>
+          </label>
+          <button class="primary" onclick="confirmAssignSlot()">Add option</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+  const STORAGE_KEY = "appt_planner_html_v2";
+
+  // Standard slots: Mon–Fri for next 14 days, 30-min blocks from 09:00 to 14:00
+  const SLOT_START_HOUR = 9;
+  const SLOT_END_HOUR = 14; // end boundary (last slot ends at 14:00)
+  const SLOT_MINUTES = 30;
+  const MAX_PICK = 3;
+
+  let view = "calendar";
+
+  let state = safeLoad() || { contacts: [] };
+
+  // Modal state
+  let slotModal = {
+    open: false,
+    contactId: null,
+    chosenDay: null, // Date at start of day
+    selected: [], // [{startISO,endISO}]
+  };
+
+  let assignModal = {
+    open: false,
+    slot: null, // {startISO,endISO}
+  };
+
+  function safeLoad() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !Array.isArray(parsed.contacts)) return null;
+      // Basic normalization
+      parsed.contacts.forEach(c => {
+        c.options = Array.isArray(c.options) ? c.options : [];
+      });
+      return parsed;
+    } catch {
+      return null;
+    }
+  }
+
+  function save() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function resetAll() {
+    if (!confirm("Reset all data in this browser?")) return;
+    localStorage.removeItem(STORAGE_KEY);
+    state = { contacts: [] };
+    render();
+  }
+
+  function setView(v) {
+    view = v;
+    document.getElementById('tab_calendar').classList.toggle('active', v === 'calendar');
+    document.getElementById('tab_availability').classList.toggle('active', v === 'availability');
+    document.getElementById('tab_confirmed').classList.toggle('active', v === 'confirmed');
+    render();
+  }
+
+  function addContact() {
+    const name = prompt("Contact name:");
+    if (!name) return;
+    const email = prompt("Email (optional):") || "";
+    const contact = { id: crypto.randomUUID(), name: name.trim(), email: email.trim(), options: [] };
+    state.contacts.push(contact);
+    save();
+    // Pop up slot picker right after adding
+    openSlotModal(contact.id);
+    render();
+  }
+
+  function deleteContact(cid) {
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    if (!confirm(`Delete contact “${c.name}”? This removes all their options.`)) return;
+    state.contacts = state.contacts.filter(x => x.id !== cid);
+    save(); render();
+  }
+
+  function setOptionStatus(cid, oid, status) {
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    const o = c.options.find(x => x.id === oid);
+    if (!o) return;
+    o.status = status;
+    save(); render();
+  }
+
+  function confirmOption(cid, oid) {
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    c.options.forEach(o => {
+      if (o.id === oid) o.status = "confirmed";
+      else if (o.status === "proposed") o.status = "removed";
+    });
+    save(); render();
+  }
+
+  function purgeRemoved(cid) {
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    c.options = c.options.filter(o => o.status !== 'removed');
+    save(); render();
+  }
+
+  function toStartOfDay(d) {
+    const x = new Date(d);
+    x.setHours(0,0,0,0);
+    return x;
+  }
+
+  function addDays(d, n) {
+    const x = new Date(d);
+    x.setDate(x.getDate() + n);
+    return x;
+  }
+
+  function isWeekday(d) {
+    const wd = d.getDay();
+    return wd >= 1 && wd <= 5;
+  }
+
+  function fmtDay(d) {
+    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: '2-digit' });
+  }
+
+  function fmtTime(d) {
+    return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function overlaps(aStart, aEnd, bStart, bEnd) {
+    return aStart < bEnd && bStart < aEnd;
+  }
+
+  function getConfirmedRanges() {
+    const ranges = [];
+    state.contacts.forEach(c => {
+      c.options.forEach(o => {
+        if (o.status === 'confirmed') {
+          ranges.push({ start: new Date(o.startISO), end: new Date(o.endISO), contactId: c.id });
+        }
+      });
+    });
+    return ranges;
+  }
+
+  function getTwoWeekDays() {
+    const today = toStartOfDay(new Date());
+    return Array.from({ length: 14 }, (_, i) => addDays(today, i));
+  }
+
+  function getWeekIndex(day) {
+    // Week 1: days 0-6, Week 2: days 7-13 relative to today
+    const today = toStartOfDay(new Date());
+    const diffDays = Math.round((toStartOfDay(day) - today) / 86400000);
+    return diffDays >= 7 ? 2 : 1;
+  }
+
+  function getStandardSlots() {
+    const days = getTwoWeekDays().filter(isWeekday);
+    const slots = [];
+    for (const day of days) {
+      for (let h = SLOT_START_HOUR; h < SLOT_END_HOUR; h++) {
+        for (let m = 0; m < 60; m += SLOT_MINUTES) {
+          const start = new Date(day);
+          start.setHours(h, m, 0, 0);
+          const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
+          if (end.getHours() > SLOT_END_HOUR || (end.getHours() === SLOT_END_HOUR && end.getMinutes() > 0)) continue;
+          slots.push({ startISO: start.toISOString(), endISO: end.toISOString() });
+        }
+      }
+    }
+    return slots;
+  }
+
+  // --- Slot Picker Modal ---
+  function openSlotModal(contactId) {
+    slotModal.open = true;
+    slotModal.contactId = contactId;
+    slotModal.chosenDay = null;
+    slotModal.selected = [];
+
+    const c = state.contacts.find(x => x.id === contactId);
+    document.getElementById('slotModalTitle').textContent = c ? `Pick up to ${MAX_PICK} options for ${c.name}` : `Pick up to ${MAX_PICK} options`;
+    document.getElementById('timeStep').style.display = 'none';
+
+    renderDayPicker();
+    renderSelectedChips();
+
+    document.getElementById('slotModalOverlay').style.display = 'flex';
+  }
+
+  function closeSlotModal() {
+    slotModal.open = false;
+    document.getElementById('slotModalOverlay').style.display = 'none';
+  }
+
+  function onModalOverlayClick(e) {
+    if (e.target.id === 'slotModalOverlay') closeSlotModal();
+  }
+
+  function clearSelections() {
+    slotModal.selected = [];
+    renderSelectedChips();
+    // also remove selected class on buttons
+    document.querySelectorAll('.slotBtn.selected').forEach(b => b.classList.remove('selected'));
+  }
+
+  function renderDayPicker() {
+    const container = document.getElementById('dayPicker');
+    container.innerHTML = '';
+
+    const daysAll = getTwoWeekDays();
+    const week1 = daysAll.slice(0,7).filter(isWeekday);
+    const week2 = daysAll.slice(7,14).filter(isWeekday);
+
+    container.appendChild(makeWeekBlock(1, week1));
+    container.appendChild(document.createElement('div')).style.height = '10px';
+    container.appendChild(makeWeekBlock(2, week2));
+  }
+
+  function makeWeekBlock(weekNumber, days) {
+    const wrap = document.createElement('div');
+    const title = document.createElement('div');
+    title.className = 'row';
+    title.style.justifyContent = 'space-between';
+    title.innerHTML = `<div class="weekLabel"><span class="weekPill">Week ${weekNumber}</span><span class="hint">${weekNumber === 1 ? 'next 7 days' : 'days 8–14'}</span></div>`;
+    wrap.appendChild(title);
+
+    const grid = document.createElement('div');
+    grid.className = 'gridDays';
+    grid.style.marginTop = '10px';
+
+    days.forEach(d => {
+      const btn = document.createElement('button');
+      btn.className = 'slotBtn';
+      btn.textContent = fmtDay(d);
+      btn.onclick = () => chooseDay(d);
+      grid.appendChild(btn);
+    });
+
+    wrap.appendChild(grid);
+    return wrap;
+  }
+
+  function chooseDay(day) {
+    slotModal.chosenDay = toStartOfDay(day);
+    document.getElementById('timeStep').style.display = 'block';
+    document.getElementById('pickedDayLabel').textContent = `Chosen: ${day.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'short', day:'2-digit' })}`;
+    renderTimePicker();
+  }
+
+  function renderTimePicker() {
+    const container = document.getElementById('timePicker');
+    container.innerHTML = '';
+
+    const grid = document.createElement('div');
+    grid.className = 'gridTimes';
+
+    const confirmed = getConfirmedRanges();
+
+    const day = slotModal.chosenDay;
+    for (let h = SLOT_START_HOUR; h < SLOT_END_HOUR; h++) {
+      for (let m = 0; m < 60; m += SLOT_MINUTES) {
+        const start = new Date(day);
+        start.setHours(h, m, 0, 0);
+        const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
+        if (end.getHours() > SLOT_END_HOUR || (end.getHours() === SLOT_END_HOUR && end.getMinutes() > 0)) continue;
+
+        const hasConflict = confirmed.some(r => overlaps(start, end, r.start, r.end));
+
+        const btn = document.createElement('button');
+        btn.className = 'slotBtn';
+        btn.textContent = `${fmtTime(start)}`;
+        btn.disabled = false; // we allow selecting even if conflict? Better: disable
+        if (hasConflict) {
+          btn.disabled = true;
+          btn.title = 'Conflicts with a confirmed appointment';
+        }
+
+        const key = start.toISOString();
+        const isSelected = slotModal.selected.some(x => x.startISO === key);
+        if (isSelected) btn.classList.add('selected');
+
+        btn.onclick = () => toggleSlot({ startISO: start.toISOString(), endISO: end.toISOString() }, btn);
+        grid.appendChild(btn);
+      }
+    }
+
+    container.appendChild(grid);
+
+    // Small note
+    const note = document.createElement('div');
+    note.className = 'hint';
+    note.style.marginTop = '10px';
+    note.textContent = 'Greyed out slots are already blocked by a confirmed appointment.';
+    container.appendChild(note);
+  }
+
+  function toggleSlot(slot, btnEl) {
+    const idx = slotModal.selected.findIndex(x => x.startISO === slot.startISO);
+    if (idx >= 0) {
+      slotModal.selected.splice(idx, 1);
+      btnEl.classList.remove('selected');
+      renderSelectedChips();
+      return;
+    }
+
+    if (slotModal.selected.length >= MAX_PICK) {
+      alert(`You can select up to ${MAX_PICK} options.`);
+      return;
+    }
+
+    slotModal.selected.push(slot);
+    btnEl.classList.add('selected');
+    renderSelectedChips();
+  }
+
+  function renderSelectedChips() {
+    const container = document.getElementById('selectedChips');
+    container.innerHTML = '';
+
+    if (slotModal.selected.length === 0) {
+      const hint = document.createElement('div');
+      hint.className = 'hint';
+      hint.textContent = 'No times selected yet.';
+      container.appendChild(hint);
+    } else {
+      slotModal.selected
+        .slice()
+        .sort((a,b) => new Date(a.startISO) - new Date(b.startISO))
+        .forEach(s => {
+          const chip = document.createElement('div');
+          chip.className = 'chip';
+          const ds = new Date(s.startISO);
+          chip.innerHTML = `<span style="font-weight:700;">${fmtDay(ds)} · ${fmtTime(ds)}</span>`;
+          const xBtn = document.createElement('button');
+          xBtn.className = 'small';
+          xBtn.textContent = 'Remove';
+          xBtn.onclick = () => {
+            slotModal.selected = slotModal.selected.filter(x => x.startISO !== s.startISO);
+            renderTimePicker();
+            renderSelectedChips();
+          };
+          chip.appendChild(xBtn);
+          container.appendChild(chip);
+        });
+    }
+
+    document.getElementById('saveSelectionsBtn').textContent = `Add options (${slotModal.selected.length}/${MAX_PICK})`;
+    document.getElementById('saveSelectionsBtn').disabled = slotModal.selected.length === 0;
+  }
+
+  function saveSelections() {
+    const c = state.contacts.find(x => x.id === slotModal.contactId);
+    if (!c) return;
+
+    // Avoid duplicates by start time
+    const existingStarts = new Set(c.options.map(o => o.startISO));
+
+    slotModal.selected
+      .slice()
+      .sort((a,b) => new Date(a.startISO) - new Date(b.startISO))
+      .forEach(slot => {
+        if (existingStarts.has(slot.startISO)) return;
+        c.options.push({
+          id: crypto.randomUUID(),
+          startISO: slot.startISO,
+          endISO: slot.endISO,
+          status: 'proposed'
+        });
+      });
+
+    save();
+    closeSlotModal();
+    render();
+  }
+
+  // --- Availability → Assign slot ---
+  function openAssignModal(slot) {
+    if (!state.contacts.length) {
+      alert('Add at least one contact first.');
+      return;
+    }
+    assignModal.open = true;
+    assignModal.slot = slot;
+
+    const ds = new Date(slot.startISO);
+    document.getElementById('assignSlotLabel').textContent = `${ds.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'2-digit' })} · ${fmtTime(ds)}`;
+
+    const select = document.getElementById('assignContactSelect');
+    select.innerHTML = '';
+    [...state.contacts].sort((a,b) => a.name.localeCompare(b.name)).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.id;
+      opt.textContent = c.name;
+      select.appendChild(opt);
+    });
+
+    document.getElementById('assignModalOverlay').style.display = 'flex';
+  }
+
+  function closeAssignModal() {
+    assignModal.open = false;
+    document.getElementById('assignModalOverlay').style.display = 'none';
+  }
+
+  function onAssignOverlayClick(e) {
+    if (e.target.id === 'assignModalOverlay') closeAssignModal();
+  }
+
+  function confirmAssignSlot() {
+    const cid = document.getElementById('assignContactSelect').value;
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+
+    // Avoid duplicates
+    const exists = c.options.some(o => o.startISO === assignModal.slot.startISO);
+    if (!exists) {
+      c.options.push({
+        id: crypto.randomUUID(),
+        startISO: assignModal.slot.startISO,
+        endISO: assignModal.slot.endISO,
+        status: 'proposed'
+      });
+      save();
+    }
+
+    closeAssignModal();
+    render();
+  }
+
+  // --- Rendering ---
+  function render() {
+    const app = document.getElementById('app');
+    app.innerHTML = '';
+
+    const contacts = [...state.contacts].sort((a,b) => a.name.localeCompare(b.name));
+
+    if (contacts.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'card';
+      empty.innerHTML = `<b>Add a contact to start.</b><div class="hint" style="margin-top:6px;">After you add a contact, a picker pops up so you can choose 3 weekday time options without typing.</div>`;
+      app.appendChild(empty);
+      return;
+    }
+
+    if (view === 'calendar') renderCalendar(app, contacts);
+    if (view === 'availability') renderAvailability(app, contacts);
+    if (view === 'confirmed') renderConfirmed(app, contacts);
+
+    app.appendChild(renderContactsCard(contacts));
+  }
+
+  function renderCalendar(root, contacts) {
+    const card = document.createElement('div');
+    card.className = 'card scroll-x';
+
+    const table = document.createElement('table');
+
+    // header
+    const head = document.createElement('tr');
+    head.innerHTML = '<th class="dayCell">Day</th>' + contacts.map(c => {
+      const email = c.email ? `<div class="hint">${escapeHtml(c.email)}</div>` : '';
+      return `<th>
+        <div class="row" style="justify-content: space-between; align-items:flex-start; gap:10px;">
+          <div>
+            <div style="font-weight:800;">${escapeHtml(c.name)}</div>
+            ${email}
+          </div>
+          <div class="row">
+            <button class="small" onclick="openSlotModal('${c.id}')">+ options</button>
+            <button class="small danger" onclick="deleteContact('${c.id}')" title="Delete contact">Delete</button>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:6px;">Use “+ options” to pick up to 3 slots.</div>
+      </th>`;
+    }).join('');
+    table.appendChild(head);
+
+    const days = getTwoWeekDays();
+
+    for (let i = 0; i < days.length; i++) {
+      const day = days[i];
+      const tr = document.createElement('tr');
+      if (i === 7) tr.classList.add('weekBreak');
+
+      const weekNum = i < 7 ? 1 : 2;
+      const weekPill = (i === 0 || i === 7)
+        ? `<span class="weekPill">Week ${weekNum}</span>`
+        : '';
+
+      tr.innerHTML = `<td class="dayCell"><div class="weekLabel">${weekPill}<span>${day.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'2-digit' })}</span></div></td>`;
+
+      contacts.forEach(c => {
+        const td = document.createElement('td');
+
+        const opts = (c.options || [])
+          .filter(o => toStartOfDay(new Date(o.startISO)).getTime() === toStartOfDay(day).getTime())
+          .sort((a,b) => new Date(a.startISO) - new Date(b.startISO));
+
+        if (opts.length === 0) {
+          td.innerHTML = '<span class="hint">—</span>';
+        } else {
+          const confirmedRanges = getConfirmedRanges();
+
+          opts.forEach(o => {
+            const s = new Date(o.startISO);
+            const e = new Date(o.endISO);
+            const timeLabel = `${fmtTime(s)}–${fmtTime(e)}`;
+
+            const conflicting = (o.status === 'proposed') && confirmedRanges.some(r => overlaps(s, e, r.start, r.end));
+
+            const div = document.createElement('div');
+            div.className = 'option';
+            div.innerHTML = `
+              <div style="display:flex; justify-content:space-between; gap:10px; align-items:flex-start;">
+                <div>
+                  <div style="font-weight:800;">${timeLabel}
+                    <span class="status ${o.status}">${o.status}</span>
+                  </div>
+                  ${conflicting ? `<div class="conflict">Conflicts with a confirmed appointment</div>` : ''}
+                </div>
+              </div>
+            `;
+
+            const actions = document.createElement('div');
+            actions.className = 'optionActions';
+
+            if (o.status !== 'confirmed') {
+              const btnC = document.createElement('button');
+              btnC.className = 'confirm small';
+              btnC.textContent = 'Confirm';
+              btnC.title = 'Mark this as confirmed (other proposed options for this contact become removed)';
+              btnC.onclick = () => confirmOption(c.id, o.id);
+              actions.appendChild(btnC);
+            }
+
+            if (o.status !== 'removed') {
+              const btnR = document.createElement('button');
+              btnR.className = 'small';
+              btnR.textContent = 'Remove';
+              btnR.onclick = () => setOptionStatus(c.id, o.id, 'removed');
+              actions.appendChild(btnR);
+            } else {
+              const btnU = document.createElement('button');
+              btnU.className = 'small';
+              btnU.textContent = 'Undo';
+              btnU.onclick = () => setOptionStatus(c.id, o.id, 'proposed');
+              actions.appendChild(btnU);
+            }
+
+            div.appendChild(actions);
+            td.appendChild(div);
+          });
+
+          const purgeBtn = document.createElement('button');
+          purgeBtn.className = 'small';
+          purgeBtn.textContent = 'Purge removed';
+          purgeBtn.title = 'Delete all removed options for this contact';
+          purgeBtn.onclick = () => purgeRemoved(c.id);
+          td.appendChild(purgeBtn);
+        }
+
+        tr.appendChild(td);
+      });
+
+      table.appendChild(tr);
+    }
+
+    card.appendChild(table);
+
+    const note = document.createElement('div');
+    note.className = 'hint';
+    note.style.marginTop = '10px';
+    note.textContent = 'Week separation is shown by a thicker border and “Week 1 / Week 2” badges.';
+    card.appendChild(note);
+
+    root.appendChild(card);
+  }
+
+  function renderAvailability(root, contacts) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const title = document.createElement('div');
+    title.innerHTML = `<b>Available slots (Mon–Fri · 09:00–14:00 · next 2 weeks)</b><div class="hint" style="margin-top:6px;">These are standard slots that don’t overlap any confirmed appointment. Click a slot to add it as a proposed option for a contact.</div>`;
+    card.appendChild(title);
+
+    const confirmed = getConfirmedRanges();
+    const all = getStandardSlots();
+
+    // Free if it doesn't overlap any confirmed appointment
+    const free = all.filter(s => {
+      const st = new Date(s.startISO);
+      const en = new Date(s.endISO);
+      return !confirmed.some(r => overlaps(st, en, r.start, r.end));
+    });
+
+    // Group by day
+    const groups = new Map();
+    free.forEach(s => {
+      const d = toStartOfDay(new Date(s.startISO)).toISOString();
+      if (!groups.has(d)) groups.set(d, []);
+      groups.get(d).push(s);
+    });
+
+    const days = Array.from(groups.keys()).sort().map(k => ({ key: k, day: new Date(k), slots: groups.get(k) }));
+
+    const wrap = document.createElement('div');
+    wrap.style.marginTop = '12px';
+
+    if (days.length === 0) {
+      const none = document.createElement('div');
+      none.className = 'subtle';
+      none.innerHTML = '<b>No free slots found.</b><div class="hint" style="margin-top:6px;">Try removing or unconfirming some appointments.</div>';
+      wrap.appendChild(none);
+    } else {
+      days.forEach((g, idx) => {
+        const block = document.createElement('div');
+        block.className = 'subtle';
+        block.style.marginBottom = '10px';
+
+        const weekNum = getWeekIndex(g.day);
+        const label = document.createElement('div');
+        label.className = 'row';
+        label.style.justifyContent = 'space-between';
+        label.innerHTML = `<div class="weekLabel"><span class="weekPill">Week ${weekNum}</span><span style="font-weight:800;">${g.day.toLocaleDateString(undefined, { weekday:'long', month:'short', day:'2-digit' })}</span></div>`;
+        block.appendChild(label);
+
+        const grid = document.createElement('div');
+        grid.className = 'gridTimes';
+        grid.style.marginTop = '10px';
+
+        g.slots.sort((a,b) => new Date(a.startISO) - new Date(b.startISO)).forEach(s => {
+          const st = new Date(s.startISO);
+          const btn = document.createElement('button');
+          btn.className = 'slotBtn';
+          btn.textContent = fmtTime(st);
+          btn.onclick = () => openAssignModal(s);
+          grid.appendChild(btn);
+        });
+
+        block.appendChild(grid);
+        wrap.appendChild(block);
+      });
+    }
+
+    card.appendChild(wrap);
+    root.appendChild(card);
+  }
+
+  function renderConfirmed(root, contacts) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const title = document.createElement('div');
+    title.innerHTML = `<b>Confirmed appointments</b><div class="hint" style="margin-top:6px;">This is what is booked across all contacts.</div>`;
+    card.appendChild(title);
+
+    const list = [];
+    contacts.forEach(c => c.options.filter(o => o.status === 'confirmed').forEach(o => list.push({ c, o })));
+    list.sort((a,b) => new Date(a.o.startISO) - new Date(b.o.startISO));
+
+    const wrap = document.createElement('div');
+    wrap.style.marginTop = '12px';
+
+    if (list.length === 0) {
+      const none = document.createElement('div');
+      none.className = 'subtle';
+      none.textContent = 'No confirmed appointments yet.';
+      wrap.appendChild(none);
+    } else {
+      list.forEach(item => {
+        const div = document.createElement('div');
+        div.className = 'option';
+        const s = new Date(item.o.startISO);
+        const e = new Date(item.o.endISO);
+        div.innerHTML = `
+          <div style="font-weight:900;">${escapeHtml(item.c.name)}</div>
+          <div class="hint" style="margin-top:4px;">${s.toLocaleDateString(undefined, { weekday:'short', year:'numeric', month:'short', day:'2-digit' })} · ${fmtTime(s)}–${fmtTime(e)}</div>
+        `;
+        const actions = document.createElement('div');
+        actions.className = 'optionActions';
+
+        const unconfirm = document.createElement('button');
+        unconfirm.className = 'small';
+        unconfirm.textContent = 'Unconfirm';
+        unconfirm.onclick = () => setOptionStatus(item.c.id, item.o.id, 'proposed');
+        actions.appendChild(unconfirm);
+
+        const remove = document.createElement('button');
+        remove.className = 'small';
+        remove.textContent = 'Remove';
+        remove.onclick = () => setOptionStatus(item.c.id, item.o.id, 'removed');
+        actions.appendChild(remove);
+
+        div.appendChild(actions);
+        wrap.appendChild(div);
+      });
+    }
+
+    card.appendChild(wrap);
+    root.appendChild(card);
+  }
+
+  function renderContactsCard(contacts) {
+    const card = document.createElement('div');
+    card.className = 'card';
+
+    const title = document.createElement('div');
+    title.innerHTML = `<b>Contacts</b><div class="hint" style="margin-top:6px;">Quick overview and cleanup.</div>`;
+    card.appendChild(title);
+
+    const list = document.createElement('div');
+    list.style.marginTop = '10px';
+
+    contacts.forEach(c => {
+      const box = document.createElement('div');
+      box.className = 'subtle';
+      box.style.marginBottom = '10px';
+
+      const counts = {
+        total: (c.options || []).length,
+        proposed: (c.options || []).filter(o => o.status === 'proposed').length,
+        confirmed: (c.options || []).filter(o => o.status === 'confirmed').length,
+        removed: (c.options || []).filter(o => o.status === 'removed').length,
+      };
+
+      box.innerHTML = `
+        <div class="row" style="justify-content:space-between; gap:10px;">
+          <div>
+            <div style="font-weight:900;">${escapeHtml(c.name)}</div>
+            <div class="hint">${c.email ? escapeHtml(c.email) : '—'}</div>
+          </div>
+          <div class="row">
+            <button class="small" onclick="openSlotModal('${c.id}')">Pick options</button>
+            <button class="small" onclick="purgeRemoved('${c.id}')">Purge removed</button>
+            <button class="small danger" onclick="deleteContact('${c.id}')">Delete</button>
+          </div>
+        </div>
+        <div class="hint" style="margin-top:8px;">Total: ${counts.total} · Proposed: ${counts.proposed} · Confirmed: ${counts.confirmed} · Removed: ${counts.removed}</div>
+      `;
+
+      list.appendChild(box);
+    });
+
+    card.appendChild(list);
+    return card;
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+  render();
+</script>
+</body>
+</html>
