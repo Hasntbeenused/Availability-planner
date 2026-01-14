@@ -295,7 +295,9 @@
             <div class="row" style="justify-content: flex-end; margin-top: 10px;">
               <button onclick="clearSelections()">Clear</button>
               <button class="primary" id="saveSelectionsBtn" onclick="saveSelections()">Add options</button>
+              <button class="confirm" id="confirmSelectionBtn" onclick="confirmSelectedSlot()">Add confirmed</button>
             </div>
+            <div class="hint" style="margin-top:8px;">Add confirmed will archive other proposed options for this contact.</div>
           </div>
         </div>
 
@@ -321,7 +323,9 @@
             <select id="assignContactSelect"></select>
           </label>
           <button class="primary" onclick="confirmAssignSlot()">Add option</button>
+          <button class="confirm" onclick="confirmAssignConfirmed()">Add confirmed</button>
         </div>
+        <div class="hint" style="margin-top:8px;">Adding a confirmed slot will archive all other proposed options for that contact.</div>
       </div>
     </div>
   </div>
@@ -710,6 +714,9 @@
 
     document.getElementById('saveSelectionsBtn').textContent = `Add options (${slotModal.selected.length}/${MAX_PICK})`;
     document.getElementById('saveSelectionsBtn').disabled = slotModal.selected.length === 0;
+    const confirmBtn = document.getElementById('confirmSelectionBtn');
+    confirmBtn.disabled = slotModal.selected.length !== 1;
+    confirmBtn.textContent = 'Add confirmed';
   }
 
   function saveSelections() {
@@ -733,6 +740,18 @@
       });
 
     save();
+    closeSlotModal();
+    render();
+  }
+
+  function confirmSelectedSlot() {
+    if (slotModal.selected.length !== 1) {
+      alert('Select exactly one slot to add as confirmed.');
+      return;
+    }
+    const c = state.contacts.find(x => x.id === slotModal.contactId);
+    if (!c) return;
+    applyConfirmedSlotToContact(c, slotModal.selected[0]);
     closeSlotModal();
     render();
   }
@@ -789,6 +808,43 @@
 
     closeAssignModal();
     render();
+  }
+
+  function confirmAssignConfirmed() {
+    const cid = document.getElementById('assignContactSelect').value;
+    const c = state.contacts.find(x => x.id === cid);
+    if (!c) return;
+    applyConfirmedSlotToContact(c, assignModal.slot);
+    closeAssignModal();
+    render();
+  }
+
+  function applyConfirmedSlotToContact(contact, slot) {
+    if (!contact || !slot) return;
+    const existing = contact.options.find(o => o.startISO === slot.startISO);
+
+    if (existing) {
+      existing.status = 'confirmed';
+    } else {
+      contact.options.push({
+        id: crypto.randomUUID(),
+        startISO: slot.startISO,
+        endISO: slot.endISO,
+        status: 'confirmed'
+      });
+    }
+
+    const archived = [];
+    contact.options = contact.options.filter(o => {
+      if (o.status === 'proposed') {
+        archived.push({ ...o, status: 'removed', archivedAt: new Date().toISOString() });
+        return false;
+      }
+      return true;
+    });
+    contact.archivedOptions.push(...archived);
+
+    save();
   }
 
   // --- Rendering ---
