@@ -323,9 +323,7 @@
             <select id="assignContactSelect"></select>
           </label>
           <button class="primary" onclick="confirmAssignSlot()">Add option</button>
-          <button class="confirm" onclick="confirmAssignConfirmed()">Add confirmed</button>
         </div>
-        <div class="hint" style="margin-top:8px;">Adding a confirmed slot will archive all other proposed options for that contact.</div>
       </div>
     </div>
   </div>
@@ -806,15 +804,6 @@
       save();
     }
 
-    closeAssignModal();
-    render();
-  }
-
-  function confirmAssignConfirmed() {
-    const cid = document.getElementById('assignContactSelect').value;
-    const c = state.contacts.find(x => x.id === cid);
-    if (!c) return;
-    applyConfirmedSlotToContact(c, assignModal.slot);
     closeAssignModal();
     render();
   }
