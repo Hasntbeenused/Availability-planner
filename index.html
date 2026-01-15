@@ -493,12 +493,18 @@
     return aStart < bEnd && bStart < aEnd;
   }
 
-  function getConfirmedRanges() {
+  function getActiveRanges() {
     const ranges = [];
     state.contacts.forEach(c => {
       c.options.forEach(o => {
-        if (o.status === 'confirmed') {
-          ranges.push({ start: new Date(o.startISO), end: new Date(o.endISO), contactId: c.id });
+        if (o.status === 'confirmed' || o.status === 'proposed') {
+          ranges.push({
+            start: new Date(o.startISO),
+            end: new Date(o.endISO),
+            contactId: c.id,
+            optionId: o.id,
+            status: o.status,
+          });
         }
       });
     });
@@ -618,7 +624,7 @@
     const grid = document.createElement('div');
     grid.className = 'gridTimes';
 
-    const confirmed = getConfirmedRanges();
+    const blocked = getActiveRanges();
 
     const day = slotModal.chosenDay;
     for (let h = SLOT_START_HOUR; h < SLOT_END_HOUR; h++) {
@@ -628,7 +634,7 @@
         const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
         if (end.getHours() > SLOT_END_HOUR || (end.getHours() === SLOT_END_HOUR && end.getMinutes() > 0)) continue;
 
-        const hasConflict = confirmed.some(r => overlaps(start, end, r.start, r.end));
+        const hasConflict = blocked.some(r => overlaps(start, end, r.start, r.end));
 
         const btn = document.createElement('button');
         btn.className = 'slotBtn';
@@ -636,7 +642,7 @@
         btn.disabled = false; // we allow selecting even if conflict? Better: disable
         if (hasConflict) {
           btn.disabled = true;
-          btn.title = 'Conflicts with a confirmed appointment';
+          btn.title = 'Conflicts with an existing appointment option';
         }
 
         const key = start.toISOString();
@@ -654,7 +660,7 @@
     const note = document.createElement('div');
     note.className = 'hint';
     note.style.marginTop = '10px';
-    note.textContent = 'Greyed out slots are already blocked by a confirmed appointment.';
+    note.textContent = 'Greyed out slots are already blocked by an existing appointment option.';
     container.appendChild(note);
   }
 
@@ -863,14 +869,14 @@
         if (opts.length === 0) {
           td.innerHTML = '<span class="hint">—</span>';
         } else {
-          const confirmedRanges = getConfirmedRanges();
+          const activeRanges = getActiveRanges();
 
           opts.forEach(o => {
             const s = new Date(o.startISO);
             const e = new Date(o.endISO);
             const timeLabel = `${fmtTime(s)}–${fmtTime(e)}`;
 
-            const conflicting = (o.status === 'proposed') && confirmedRanges.some(r => overlaps(s, e, r.start, r.end));
+            const conflicting = activeRanges.some(r => r.optionId !== o.id && overlaps(s, e, r.start, r.end));
 
             const div = document.createElement('div');
             div.className = 'option';
@@ -880,7 +886,7 @@
                   <div style="font-weight:800;">${timeLabel}
                     <span class="status ${o.status}">${o.status}</span>
                   </div>
-                  ${conflicting ? `<div class="conflict">Conflicts with a confirmed appointment</div>` : ''}
+                  ${conflicting ? `<div class="conflict">Conflicts with another appointment option</div>` : ''}
                 </div>
               </div>
             `;
@@ -936,17 +942,17 @@
     card.className = 'card';
 
     const title = document.createElement('div');
-    title.innerHTML = `<b>Available slots (Mon–Fri · 09:00–14:00 · next 2 weeks)</b><div class="hint" style="margin-top:6px;">These are standard slots that don’t overlap any confirmed appointment. Click a slot to add it as a proposed option for a contact.</div>`;
+    title.innerHTML = `<b>Available slots (Mon–Fri · 09:00–14:00 · next 2 weeks)</b><div class="hint" style="margin-top:6px;">These are standard slots that don’t overlap any existing appointment option (proposed or confirmed). Click a slot to add it as a proposed option for a contact.</div>`;
     card.appendChild(title);
 
-    const confirmed = getConfirmedRanges();
+    const blocked = getActiveRanges();
     const all = getStandardSlots();
 
-    // Free if it doesn't overlap any confirmed appointment
+    // Free if it doesn't overlap any proposed or confirmed appointment
     const free = all.filter(s => {
       const st = new Date(s.startISO);
       const en = new Date(s.endISO);
-      return !confirmed.some(r => overlaps(st, en, r.start, r.end));
+      return !blocked.some(r => overlaps(st, en, r.start, r.end));
     });
 
     // Group by day
