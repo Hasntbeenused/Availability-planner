@@ -243,7 +243,7 @@
 <body>
   <header>
     <h1>Appointment Planner</h1>
-    <p>Offer 3 time options per contact, confirm one, and keep a clean 2‑week overview (Mon–Fri, 09:00–14:00).</p>
+    <p>Offer multiple time options per contact, confirm one, and keep a clean 2‑week overview (Mon–Fri, 09:00–14:00).</p>
     <div class="row tabs" style="margin-top:10px;">
       <button class="active" id="tab_calendar" onclick="setView('calendar')">Calendar</button>
       <button id="tab_availability" onclick="setView('availability')">Available slots</button>
@@ -262,7 +262,7 @@
     <div class="modal" onclick="event.stopPropagation()">
       <div class="modalHeader">
         <div>
-          <h2 id="slotModalTitle">Pick up to 3 options</h2>
+          <h2 id="slotModalTitle">Pick options</h2>
           <div class="hint" id="slotModalSubtitle">Choose a weekday, then select 30‑minute slots from 09:00–14:00.</div>
         </div>
         <div class="row">
@@ -283,7 +283,7 @@
 
         <div class="subtle" id="timeStep" style="display:none;">
           <div class="row" style="justify-content: space-between;">
-            <div style="font-weight:700;">Step 2: pick up to 3 times</div>
+            <div style="font-weight:700;">Step 2: pick times</div>
             <div class="hint" id="pickedDayLabel"></div>
           </div>
           <div class="divider"></div>
@@ -292,6 +292,10 @@
           <div>
             <div class="hint" style="margin-bottom:6px;">Selected:</div>
             <div id="selectedChips"></div>
+            <label class="row" style="margin-top:10px; gap:6px; align-items:center;">
+              <input type="checkbox" id="slotModalConfirmToggle" />
+              <span class="hint">Add these as confirmed appointments (archives other proposed options for this contact).</span>
+            </label>
             <div class="row" style="justify-content: flex-end; margin-top: 10px;">
               <button onclick="clearSelections()">Clear</button>
               <button class="primary" id="saveSelectionsBtn" onclick="saveSelections()">Add options</button>
@@ -322,6 +326,10 @@
           </label>
           <button class="primary" onclick="confirmAssignSlot()">Add option</button>
         </div>
+        <label class="row" style="margin-top:12px; gap:6px; align-items:center;">
+          <input type="checkbox" id="assignConfirmToggle" />
+          <span class="hint">Mark as confirmed (archives other proposed options for this contact).</span>
+        </label>
       </div>
     </div>
   </div>
@@ -333,8 +341,6 @@
   const SLOT_START_HOUR = 9;
   const SLOT_END_HOUR = 14; // end boundary (last slot ends at 14:00)
   const SLOT_MINUTES = 30;
-  const MAX_PICK = 3;
-
   let view = "calendar";
 
   let state = safeLoad() || { contacts: [] };
@@ -345,6 +351,7 @@
     contactId: null,
     chosenDay: null, // Date at start of day
     selected: [], // [{startISO,endISO}]
+    markConfirmed: false,
   };
 
   let assignModal = {
@@ -418,7 +425,7 @@
     save(); render();
   }
 
-  function confirmOption(cid, oid) {
+  function confirmOption(cid, oid, { silent = false } = {}) {
     const c = state.contacts.find(x => x.id === cid);
     if (!c) return;
     const archived = [];
@@ -434,7 +441,10 @@
       return true;
     });
     c.archivedOptions.push(...archived);
-    save(); render();
+    if (!silent) {
+      save();
+      render();
+    }
   }
 
   function archiveOption(cid, oid) {
@@ -546,10 +556,12 @@
     slotModal.contactId = contactId;
     slotModal.chosenDay = null;
     slotModal.selected = [];
+    slotModal.markConfirmed = false;
 
     const c = state.contacts.find(x => x.id === contactId);
-    document.getElementById('slotModalTitle').textContent = c ? `Pick up to ${MAX_PICK} options for ${c.name}` : `Pick up to ${MAX_PICK} options`;
+    document.getElementById('slotModalTitle').textContent = c ? `Pick options for ${c.name}` : 'Pick options';
     document.getElementById('timeStep').style.display = 'none';
+    document.getElementById('slotModalConfirmToggle').checked = false;
 
     renderDayPicker();
     renderSelectedChips();
@@ -568,6 +580,8 @@
 
   function clearSelections() {
     slotModal.selected = [];
+    slotModal.markConfirmed = false;
+    document.getElementById('slotModalConfirmToggle').checked = false;
     renderSelectedChips();
     // also remove selected class on buttons
     document.querySelectorAll('.slotBtn.selected').forEach(b => b.classList.remove('selected'));
@@ -673,11 +687,6 @@
       return;
     }
 
-    if (slotModal.selected.length >= MAX_PICK) {
-      alert(`You can select up to ${MAX_PICK} options.`);
-      return;
-    }
-
     slotModal.selected.push(slot);
     btnEl.classList.add('selected');
     renderSelectedChips();
@@ -714,13 +723,15 @@
         });
     }
 
-    document.getElementById('saveSelectionsBtn').textContent = `Add options (${slotModal.selected.length}/${MAX_PICK})`;
+    document.getElementById('saveSelectionsBtn').textContent = `Add options (${slotModal.selected.length})`;
     document.getElementById('saveSelectionsBtn').disabled = slotModal.selected.length === 0;
   }
 
   function saveSelections() {
     const c = state.contacts.find(x => x.id === slotModal.contactId);
     if (!c) return;
+
+    slotModal.markConfirmed = document.getElementById('slotModalConfirmToggle').checked;
 
     // Avoid duplicates by start time
     const existingStarts = new Set(c.options.map(o => o.startISO));
@@ -729,13 +740,25 @@
       .slice()
       .sort((a,b) => new Date(a.startISO) - new Date(b.startISO))
       .forEach(slot => {
-        if (existingStarts.has(slot.startISO)) return;
-        c.options.push({
+        if (existingStarts.has(slot.startISO)) {
+          if (slotModal.markConfirmed) {
+            const existingOption = c.options.find(o => o.startISO === slot.startISO);
+            if (existingOption) {
+              confirmOption(c.id, existingOption.id, { silent: true });
+            }
+          }
+          return;
+        }
+        const newOption = {
           id: crypto.randomUUID(),
           startISO: slot.startISO,
           endISO: slot.endISO,
-          status: 'proposed'
-        });
+          status: slotModal.markConfirmed ? 'confirmed' : 'proposed'
+        };
+        c.options.push(newOption);
+        if (slotModal.markConfirmed) {
+          confirmOption(c.id, newOption.id, { silent: true });
+        }
       });
 
     save();
@@ -754,6 +777,7 @@
 
     const ds = new Date(slot.startISO);
     document.getElementById('assignSlotLabel').textContent = `${ds.toLocaleDateString(undefined, { weekday:'short', month:'short', day:'2-digit' })} · ${fmtTime(ds)}`;
+    document.getElementById('assignConfirmToggle').checked = false;
 
     const select = document.getElementById('assignContactSelect');
     select.innerHTML = '';
@@ -781,15 +805,24 @@
     const c = state.contacts.find(x => x.id === cid);
     if (!c) return;
 
+    const markConfirmed = document.getElementById('assignConfirmToggle').checked;
+
     // Avoid duplicates
-    const exists = c.options.some(o => o.startISO === assignModal.slot.startISO);
-    if (!exists) {
-      c.options.push({
+    const existingOption = c.options.find(o => o.startISO === assignModal.slot.startISO);
+    if (!existingOption) {
+      const newOption = {
         id: crypto.randomUUID(),
         startISO: assignModal.slot.startISO,
         endISO: assignModal.slot.endISO,
-        status: 'proposed'
-      });
+        status: markConfirmed ? 'confirmed' : 'proposed'
+      };
+      c.options.push(newOption);
+      if (markConfirmed) {
+        confirmOption(c.id, newOption.id, { silent: true });
+      }
+      save();
+    } else if (markConfirmed) {
+      confirmOption(c.id, existingOption.id, { silent: true });
       save();
     }
 
@@ -807,7 +840,7 @@
     if (contacts.length === 0) {
       const empty = document.createElement('div');
       empty.className = 'card';
-      empty.innerHTML = `<b>Add a contact to start.</b><div class="hint" style="margin-top:6px;">After you add a contact, a picker pops up so you can choose 3 weekday time options without typing.</div>`;
+      empty.innerHTML = `<b>Add a contact to start.</b><div class="hint" style="margin-top:6px;">After you add a contact, a picker pops up so you can choose weekday time options without typing.</div>`;
       app.appendChild(empty);
       return;
     }
@@ -840,7 +873,7 @@
             <button class="small danger" onclick="deleteContact('${c.id}')" title="Delete contact">Delete</button>
           </div>
         </div>
-        <div class="hint" style="margin-top:6px;">Use “+ options” to pick up to 3 slots.</div>
+        <div class="hint" style="margin-top:6px;">Use “+ options” to add any number of slots.</div>
       </th>`;
     }).join('');
     table.appendChild(head);
