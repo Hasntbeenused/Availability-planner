@@ -243,13 +243,24 @@
 <body>
   <header>
     <h1>Appointment Planner</h1>
-    <p>Offer multiple time options per contact, confirm one, and keep a clean 3‑week overview (Mon–Fri, 09:00–14:00).</p>
+    <p>Offer multiple time options per contact, confirm one, and keep a clean 3‑week overview (Mon–Fri, <span id="windowSummary">09:00–14:00</span>).</p>
     <div class="row tabs" style="margin-top:10px;">
       <button class="active" id="tab_calendar" onclick="setView('calendar')">Calendar</button>
       <button id="tab_availability" onclick="setView('availability')">Available slots</button>
       <button id="tab_confirmed" onclick="setView('confirmed')">Confirmed</button>
       <button class="primary" onclick="addContact()">+ Add contact</button>
       <button class="ghost" onclick="resetAll()" title="Clears data from this browser">Reset</button>
+    </div>
+    <div class="row" style="margin-top:10px;">
+      <label class="row" style="gap:6px; align-items:center;">
+        <span class="hint">Appointment window:</span>
+        <input type="time" id="windowStart" step="1800" value="09:00" />
+      </label>
+      <span class="hint">to</span>
+      <label class="row" style="gap:6px; align-items:center;">
+        <input type="time" id="windowEnd" step="1800" value="14:00" />
+      </label>
+      <button class="small" onclick="applyWindowSettings()">Update window</button>
     </div>
   </header>
 
@@ -337,14 +348,13 @@
 <script>
   const STORAGE_KEY = "appt_planner_html_v2";
 
-  // Standard slots: Mon–Fri through the end of the third week, 30-min blocks from 09:00 to 14:00
-  const SLOT_START_HOUR = 9;
-  const SLOT_END_HOUR = 14; // end boundary (last slot ends at 14:00)
+  // Standard slots: Mon–Fri through the end of the third week, 30-min blocks from a configurable window
+  const DEFAULT_WINDOW = { startTime: "09:00", endTime: "14:00" };
   const SLOT_MINUTES = 30;
   const PLANNER_WEEKS = 3;
   let view = "calendar";
 
-  let state = safeLoad() || { contacts: [] };
+  let state = safeLoad() || { contacts: [], settings: { ...DEFAULT_WINDOW } };
 
   // Modal state
   let slotModal = {
@@ -381,6 +391,7 @@
         });
         c.options = activeOptions;
       });
+      parsed.settings = normalizeSettings(parsed.settings);
       return parsed;
     } catch {
       return null;
@@ -391,10 +402,82 @@
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   }
 
+  function normalizeSettings(settings) {
+    const safe = { ...DEFAULT_WINDOW, ...(settings || {}) };
+    const start = parseTimeToMinutes(safe.startTime);
+    const end = parseTimeToMinutes(safe.endTime);
+    if (Number.isNaN(start) || Number.isNaN(end) || start >= end) {
+      return { ...DEFAULT_WINDOW };
+    }
+    return safe;
+  }
+
+  function parseTimeToMinutes(value) {
+    if (!value || typeof value !== "string") return NaN;
+    const [h, m] = value.split(":").map(Number);
+    if (Number.isNaN(h) || Number.isNaN(m)) return NaN;
+    return h * 60 + m;
+  }
+
+  function minutesToTime(minutes) {
+    const h = String(Math.floor(minutes / 60)).padStart(2, "0");
+    const m = String(minutes % 60).padStart(2, "0");
+    return `${h}:${m}`;
+  }
+
+  function getWindowConfig() {
+    const settings = normalizeSettings(state.settings);
+    const startMinutes = parseTimeToMinutes(settings.startTime);
+    const endMinutes = parseTimeToMinutes(settings.endTime);
+    return {
+      startMinutes,
+      endMinutes,
+      startLabel: settings.startTime,
+      endLabel: settings.endTime,
+    };
+  }
+
+  function applyWindowSettings() {
+    const startInput = document.getElementById("windowStart");
+    const endInput = document.getElementById("windowEnd");
+    const startTime = startInput.value;
+    const endTime = endInput.value;
+    const startMinutes = parseTimeToMinutes(startTime);
+    const endMinutes = parseTimeToMinutes(endTime);
+    if (Number.isNaN(startMinutes) || Number.isNaN(endMinutes) || startMinutes >= endMinutes) {
+      alert("Please pick a valid window where the start time is before the end time.");
+      syncWindowInputs();
+      return;
+    }
+    state.settings = { startTime, endTime };
+    save();
+    updateWindowLabels();
+    render();
+  }
+
+  function updateWindowLabels() {
+    const { startLabel, endLabel } = getWindowConfig();
+    const summary = `${startLabel}–${endLabel}`;
+    const summaryEl = document.getElementById("windowSummary");
+    if (summaryEl) summaryEl.textContent = summary;
+    const subtitle = document.getElementById("slotModalSubtitle");
+    if (subtitle) subtitle.textContent = `Choose a weekday, then select ${SLOT_MINUTES}-minute slots from ${summary}.`;
+  }
+
+  function syncWindowInputs() {
+    const { startLabel, endLabel } = getWindowConfig();
+    const startInput = document.getElementById("windowStart");
+    const endInput = document.getElementById("windowEnd");
+    if (startInput) startInput.value = startLabel;
+    if (endInput) endInput.value = endLabel;
+  }
+
   function resetAll() {
     if (!confirm("Reset all data in this browser?")) return;
     localStorage.removeItem(STORAGE_KEY);
-    state = { contacts: [] };
+    state = { contacts: [], settings: { ...DEFAULT_WINDOW } };
+    syncWindowInputs();
+    updateWindowLabels();
     render();
   }
 
@@ -564,15 +647,15 @@
   function getStandardSlots() {
     const days = getPlannerDays().filter(isWeekday);
     const slots = [];
+    const { startMinutes, endMinutes } = getWindowConfig();
     for (const day of days) {
-      for (let h = SLOT_START_HOUR; h < SLOT_END_HOUR; h++) {
-        for (let m = 0; m < 60; m += SLOT_MINUTES) {
-          const start = new Date(day);
-          start.setHours(h, m, 0, 0);
-          const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
-          if (end.getHours() > SLOT_END_HOUR || (end.getHours() === SLOT_END_HOUR && end.getMinutes() > 0)) continue;
-          slots.push({ startISO: start.toISOString(), endISO: end.toISOString() });
-        }
+      for (let minutes = startMinutes; minutes < endMinutes; minutes += SLOT_MINUTES) {
+        const start = new Date(day);
+        start.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+        const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
+        const endMinutesValue = end.getHours() * 60 + end.getMinutes();
+        if (endMinutesValue > endMinutes) continue;
+        slots.push({ startISO: start.toISOString(), endISO: end.toISOString() });
       }
     }
     return slots;
@@ -588,6 +671,7 @@
 
     const c = state.contacts.find(x => x.id === contactId);
     document.getElementById('slotModalTitle').textContent = c ? `Pick options for ${c.name}` : 'Pick options';
+    updateWindowLabels();
     document.getElementById('timeStep').style.display = 'none';
     document.getElementById('slotModalConfirmToggle').checked = false;
 
@@ -671,31 +755,31 @@
     const blocked = getActiveRanges();
 
     const day = slotModal.chosenDay;
-    for (let h = SLOT_START_HOUR; h < SLOT_END_HOUR; h++) {
-      for (let m = 0; m < 60; m += SLOT_MINUTES) {
-        const start = new Date(day);
-        start.setHours(h, m, 0, 0);
-        const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
-        if (end.getHours() > SLOT_END_HOUR || (end.getHours() === SLOT_END_HOUR && end.getMinutes() > 0)) continue;
+    const { startMinutes, endMinutes } = getWindowConfig();
+    for (let minutes = startMinutes; minutes < endMinutes; minutes += SLOT_MINUTES) {
+      const start = new Date(day);
+      start.setHours(Math.floor(minutes / 60), minutes % 60, 0, 0);
+      const end = new Date(start.getTime() + SLOT_MINUTES * 60000);
+      const endMinutesValue = end.getHours() * 60 + end.getMinutes();
+      if (endMinutesValue > endMinutes) continue;
 
-        const hasConflict = blocked.some(r => overlaps(start, end, r.start, r.end));
+      const hasConflict = blocked.some(r => overlaps(start, end, r.start, r.end));
 
-        const btn = document.createElement('button');
-        btn.className = 'slotBtn';
-        btn.textContent = `${fmtTime(start)}`;
-        btn.disabled = false; // we allow selecting even if conflict? Better: disable
-        if (hasConflict) {
-          btn.disabled = true;
-          btn.title = 'Conflicts with an existing appointment option';
-        }
-
-        const key = start.toISOString();
-        const isSelected = slotModal.selected.some(x => x.startISO === key);
-        if (isSelected) btn.classList.add('selected');
-
-        btn.onclick = () => toggleSlot({ startISO: start.toISOString(), endISO: end.toISOString() }, btn);
-        grid.appendChild(btn);
+      const btn = document.createElement('button');
+      btn.className = 'slotBtn';
+      btn.textContent = `${fmtTime(start)}`;
+      btn.disabled = false; // we allow selecting even if conflict? Better: disable
+      if (hasConflict) {
+        btn.disabled = true;
+        btn.title = 'Conflicts with an existing appointment option';
       }
+
+      const key = start.toISOString();
+      const isSelected = slotModal.selected.some(x => x.startISO === key);
+      if (isSelected) btn.classList.add('selected');
+
+      btn.onclick = () => toggleSlot({ startISO: start.toISOString(), endISO: end.toISOString() }, btn);
+      grid.appendChild(btn);
     }
 
     container.appendChild(grid);
@@ -1005,7 +1089,8 @@
     card.className = 'card';
 
     const title = document.createElement('div');
-    title.innerHTML = `<b>Available slots (Mon–Fri · 09:00–14:00 · next 3 weeks)</b><div class="hint" style="margin-top:6px;">These are standard slots that don’t overlap any existing appointment option (proposed or confirmed). Click a slot to add it as a proposed option for a contact.</div>`;
+    const { startLabel, endLabel } = getWindowConfig();
+    title.innerHTML = `<b>Available slots (Mon–Fri · ${startLabel}–${endLabel} · next 3 weeks)</b><div class="hint" style="margin-top:6px;">These are standard slots that don’t overlap any existing appointment option (proposed or confirmed). Click a slot to add it as a proposed option for a contact.</div>`;
     card.appendChild(title);
 
     const blocked = getActiveRanges();
@@ -1227,6 +1312,8 @@
       .replaceAll("'", '&#39;');
   }
 
+  syncWindowInputs();
+  updateWindowLabels();
   render();
 </script>
 </body>
