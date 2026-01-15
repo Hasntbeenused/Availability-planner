@@ -337,11 +337,11 @@
 <script>
   const STORAGE_KEY = "appt_planner_html_v2";
 
-  // Standard slots: Mon–Fri for next 21 days, 30-min blocks from 09:00 to 14:00
+  // Standard slots: Mon–Fri through the end of the third week, 30-min blocks from 09:00 to 14:00
   const SLOT_START_HOUR = 9;
   const SLOT_END_HOUR = 14; // end boundary (last slot ends at 14:00)
   const SLOT_MINUTES = 30;
-  const PLANNER_DAYS = 21;
+  const PLANNER_WEEKS = 3;
   let view = "calendar";
 
   let state = safeLoad() || { contacts: [] };
@@ -487,6 +487,12 @@
     return x;
   }
 
+  function startOfWeekMonday(d) {
+    const day = toStartOfDay(d);
+    const diff = (day.getDay() + 6) % 7;
+    return addDays(day, -diff);
+  }
+
   function isWeekday(d) {
     const wd = d.getDay();
     return wd >= 1 && wd <= 5;
@@ -524,7 +530,10 @@
 
   function getPlannerDays() {
     const today = toStartOfDay(new Date());
-    return Array.from({ length: PLANNER_DAYS }, (_, i) => addDays(today, i));
+    const weekStart = startOfWeekMonday(today);
+    const endOfThirdWeek = addDays(weekStart, PLANNER_WEEKS * 7 - 1);
+    const daysCount = Math.floor((endOfThirdWeek - today) / (24 * 60 * 60 * 1000)) + 1;
+    return Array.from({ length: daysCount }, (_, i) => addDays(today, i));
   }
 
   function getWeekSegments() {
@@ -532,7 +541,7 @@
     const weeks = [];
     let current = [];
     days.forEach((day, idx) => {
-      if (idx !== 0 && day.getDay() === 0) {
+      if (idx !== 0 && day.getDay() === 1) {
         weeks.push(current);
         current = [];
       }
@@ -616,7 +625,7 @@
       if (index > 0) {
         container.appendChild(document.createElement('div')).style.height = '10px';
       }
-      container.appendChild(makeWeekBlock(index + 1, weekDays, weeks[index][0]));
+      container.appendChild(makeWeekBlock(index + 1, weekDays, startOfWeekMonday(weekDays[0])));
     });
   }
 
@@ -904,10 +913,10 @@
     for (let i = 0; i < days.length; i++) {
       const day = days[i];
       const tr = document.createElement('tr');
-      if (i !== 0 && day.getDay() === 0) tr.classList.add('weekBreak');
+      if (i !== 0 && day.getDay() === 1) tr.classList.add('weekBreak');
 
       const weekNum = getWeekIndex(day);
-      const weekPill = (i === 0 || day.getDay() === 0)
+      const weekPill = (i === 0 || day.getDay() === 1)
         ? `<span class="weekPill">Week ${weekNum}</span>`
         : '';
 
@@ -985,7 +994,7 @@
     const note = document.createElement('div');
     note.className = 'hint';
     note.style.marginTop = '10px';
-    note.textContent = 'Week separation follows Sundays and is shown by a thicker border and “Week” badges.';
+    note.textContent = 'Week separation follows Mondays and is shown by a thicker border and “Week” badges.';
     card.appendChild(note);
 
     root.appendChild(card);
