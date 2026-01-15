@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Appointment Planner (2 Weeks)</title>
+  <title>Appointment Planner (3 Weeks)</title>
   <style>
     :root {
       --bg: #fafafa;
@@ -243,7 +243,7 @@
 <body>
   <header>
     <h1>Appointment Planner</h1>
-    <p>Offer multiple time options per contact, confirm one, and keep a clean 2‑week overview (Mon–Fri, 09:00–14:00).</p>
+    <p>Offer multiple time options per contact, confirm one, and keep a clean 3‑week overview (Mon–Fri, 09:00–14:00).</p>
     <div class="row tabs" style="margin-top:10px;">
       <button class="active" id="tab_calendar" onclick="setView('calendar')">Calendar</button>
       <button id="tab_availability" onclick="setView('availability')">Available slots</button>
@@ -337,10 +337,11 @@
 <script>
   const STORAGE_KEY = "appt_planner_html_v2";
 
-  // Standard slots: Mon–Fri for next 14 days, 30-min blocks from 09:00 to 14:00
+  // Standard slots: Mon–Fri for next 21 days, 30-min blocks from 09:00 to 14:00
   const SLOT_START_HOUR = 9;
   const SLOT_END_HOUR = 14; // end boundary (last slot ends at 14:00)
   const SLOT_MINUTES = 30;
+  const PLANNER_DAYS = 21;
   let view = "calendar";
 
   let state = safeLoad() || { contacts: [] };
@@ -521,20 +522,38 @@
     return ranges;
   }
 
-  function getTwoWeekDays() {
+  function getPlannerDays() {
     const today = toStartOfDay(new Date());
-    return Array.from({ length: 14 }, (_, i) => addDays(today, i));
+    return Array.from({ length: PLANNER_DAYS }, (_, i) => addDays(today, i));
+  }
+
+  function getWeekSegments() {
+    const days = getPlannerDays();
+    const weeks = [];
+    let current = [];
+    days.forEach((day, idx) => {
+      if (idx !== 0 && day.getDay() === 0) {
+        weeks.push(current);
+        current = [];
+      }
+      current.push(day);
+    });
+    if (current.length) weeks.push(current);
+    return weeks;
   }
 
   function getWeekIndex(day) {
-    // Week 1: days 0-6, Week 2: days 7-13 relative to today
-    const today = toStartOfDay(new Date());
-    const diffDays = Math.round((toStartOfDay(day) - today) / 86400000);
-    return diffDays >= 7 ? 2 : 1;
+    const target = toStartOfDay(day).toISOString();
+    const weeks = getWeekSegments();
+    for (let i = 0; i < weeks.length; i++) {
+      const found = weeks[i].some(d => toStartOfDay(d).toISOString() === target);
+      if (found) return i + 1;
+    }
+    return 1;
   }
 
   function getStandardSlots() {
-    const days = getTwoWeekDays().filter(isWeekday);
+    const days = getPlannerDays().filter(isWeekday);
     const slots = [];
     for (const day of days) {
       for (let h = SLOT_START_HOUR; h < SLOT_END_HOUR; h++) {
@@ -591,21 +610,23 @@
     const container = document.getElementById('dayPicker');
     container.innerHTML = '';
 
-    const daysAll = getTwoWeekDays();
-    const week1 = daysAll.slice(0,7).filter(isWeekday);
-    const week2 = daysAll.slice(7,14).filter(isWeekday);
-
-    container.appendChild(makeWeekBlock(1, week1));
-    container.appendChild(document.createElement('div')).style.height = '10px';
-    container.appendChild(makeWeekBlock(2, week2));
+    const weeks = getWeekSegments().map(week => week.filter(isWeekday));
+    weeks.forEach((weekDays, index) => {
+      if (!weekDays.length) return;
+      if (index > 0) {
+        container.appendChild(document.createElement('div')).style.height = '10px';
+      }
+      container.appendChild(makeWeekBlock(index + 1, weekDays, weeks[index][0]));
+    });
   }
 
-  function makeWeekBlock(weekNumber, days) {
+  function makeWeekBlock(weekNumber, days, weekStart) {
     const wrap = document.createElement('div');
     const title = document.createElement('div');
     title.className = 'row';
     title.style.justifyContent = 'space-between';
-    title.innerHTML = `<div class="weekLabel"><span class="weekPill">Week ${weekNumber}</span><span class="hint">${weekNumber === 1 ? 'next 7 days' : 'days 8–14'}</span></div>`;
+    const startLabel = weekStart ? weekStart.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: '2-digit' }) : '';
+    title.innerHTML = `<div class="weekLabel"><span class="weekPill">Week ${weekNumber}</span><span class="hint">Starts ${startLabel}</span></div>`;
     wrap.appendChild(title);
 
     const grid = document.createElement('div');
@@ -878,15 +899,15 @@
     }).join('');
     table.appendChild(head);
 
-    const days = getTwoWeekDays();
+    const days = getPlannerDays();
 
     for (let i = 0; i < days.length; i++) {
       const day = days[i];
       const tr = document.createElement('tr');
-      if (i === 7) tr.classList.add('weekBreak');
+      if (i !== 0 && day.getDay() === 0) tr.classList.add('weekBreak');
 
-      const weekNum = i < 7 ? 1 : 2;
-      const weekPill = (i === 0 || i === 7)
+      const weekNum = getWeekIndex(day);
+      const weekPill = (i === 0 || day.getDay() === 0)
         ? `<span class="weekPill">Week ${weekNum}</span>`
         : '';
 
@@ -964,7 +985,7 @@
     const note = document.createElement('div');
     note.className = 'hint';
     note.style.marginTop = '10px';
-    note.textContent = 'Week separation is shown by a thicker border and “Week 1 / Week 2” badges.';
+    note.textContent = 'Week separation follows Sundays and is shown by a thicker border and “Week” badges.';
     card.appendChild(note);
 
     root.appendChild(card);
@@ -975,7 +996,7 @@
     card.className = 'card';
 
     const title = document.createElement('div');
-    title.innerHTML = `<b>Available slots (Mon–Fri · 09:00–14:00 · next 2 weeks)</b><div class="hint" style="margin-top:6px;">These are standard slots that don’t overlap any existing appointment option (proposed or confirmed). Click a slot to add it as a proposed option for a contact.</div>`;
+    title.innerHTML = `<b>Available slots (Mon–Fri · 09:00–14:00 · next 3 weeks)</b><div class="hint" style="margin-top:6px;">These are standard slots that don’t overlap any existing appointment option (proposed or confirmed). Click a slot to add it as a proposed option for a contact.</div>`;
     card.appendChild(title);
 
     const blocked = getActiveRanges();
