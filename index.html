@@ -251,6 +251,10 @@
       flex: 1;
       min-width: 220px;
     }
+
+    .fileInput {
+      display: none;
+    }
   </style>
 </head>
 <body>
@@ -262,6 +266,8 @@
       <button id="tab_availability" onclick="setView('availability')">Available slots</button>
       <button id="tab_confirmed" onclick="setView('confirmed')">Confirmed</button>
       <button class="primary" onclick="addContact()">+ Add contact</button>
+      <button onclick="downloadBackup()">Download backup</button>
+      <button onclick="triggerBackupUpload()">Upload backup</button>
       <button class="ghost" onclick="resetAll()" title="Clears data from this browser">Reset</button>
     </div>
     <div class="row" style="margin-top:10px;">
@@ -275,6 +281,7 @@
       </label>
       <button class="small" onclick="applyWindowSettings()">Update window</button>
     </div>
+    <input class="fileInput" type="file" id="backupUpload" accept="application/json" onchange="handleBackupUpload(event)" />
   </header>
 
   <main>
@@ -392,21 +399,7 @@
       if (!raw) return null;
       const parsed = JSON.parse(raw);
       if (!parsed || !Array.isArray(parsed.contacts)) return null;
-      // Basic normalization
-      parsed.contacts.forEach(c => {
-        c.options = Array.isArray(c.options) ? c.options : [];
-        c.archivedOptions = Array.isArray(c.archivedOptions) ? c.archivedOptions : [];
-        const activeOptions = [];
-        c.options.forEach(o => {
-          if (!o.status) o.status = 'proposed';
-          if (o.status === 'removed') {
-            c.archivedOptions.push({ ...o, status: 'removed' });
-          } else {
-            activeOptions.push(o);
-          }
-        });
-        c.options = activeOptions;
-      });
+      parsed.contacts = normalizeContacts(parsed.contacts);
       parsed.settings = normalizeSettings(parsed.settings);
       return parsed;
     } catch {
@@ -416,6 +409,27 @@
 
   function save() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+  }
+
+  function normalizeContacts(contacts) {
+    return contacts.map(c => {
+      const normalized = {
+        ...c,
+        options: Array.isArray(c.options) ? c.options : [],
+        archivedOptions: Array.isArray(c.archivedOptions) ? c.archivedOptions : [],
+      };
+      const activeOptions = [];
+      normalized.options.forEach(o => {
+        if (!o.status) o.status = 'proposed';
+        if (o.status === 'removed') {
+          normalized.archivedOptions.push({ ...o, status: 'removed' });
+        } else {
+          activeOptions.push(o);
+        }
+      });
+      normalized.options = activeOptions;
+      return normalized;
+    });
   }
 
   function normalizeSettings(settings) {
@@ -489,12 +503,61 @@
   }
 
   function resetAll() {
-    if (!confirm("Reset all data in this browser?")) return;
+    if (!confirm("Reset the calendar and all contacts? This clears data from this browser.")) return;
     localStorage.removeItem(STORAGE_KEY);
     state = { contacts: [], settings: { ...DEFAULT_WINDOW } };
     syncWindowInputs();
     updateWindowLabels();
     render();
+  }
+
+  function downloadBackup() {
+    const data = JSON.stringify(state, null, 2);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+    link.href = url;
+    link.download = `appointment-planner-backup-${timestamp}.json`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function triggerBackupUpload() {
+    document.getElementById("backupUpload").click();
+  }
+
+  function handleBackupUpload(event) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (!parsed || !Array.isArray(parsed.contacts)) {
+          alert("That backup file doesn't look valid.");
+          return;
+        }
+        if (!confirm("Load this backup and replace the current calendar data?")) {
+          return;
+        }
+        state = {
+          contacts: normalizeContacts(parsed.contacts),
+          settings: normalizeSettings(parsed.settings),
+        };
+        save();
+        syncWindowInputs();
+        updateWindowLabels();
+        render();
+      } catch (error) {
+        alert("Unable to read that backup file.");
+      } finally {
+        event.target.value = "";
+      }
+    };
+    reader.readAsText(file);
   }
 
   function setView(v) {
