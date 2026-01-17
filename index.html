@@ -378,6 +378,7 @@
     chosenDay: null, // Date at start of day
     selected: [], // [{startISO,endISO}]
     markConfirmed: false,
+    originalStarts: new Set(),
   };
 
   let assignModal = {
@@ -666,9 +667,10 @@
     return aStart < bEnd && bStart < aEnd;
   }
 
-  function getActiveRanges() {
+  function getActiveRanges(excludeContactId = null) {
     const ranges = [];
     state.contacts.forEach(c => {
+      if (excludeContactId && c.id === excludeContactId) return;
       c.options.forEach(o => {
         if (o.status === 'confirmed' || o.status === 'proposed') {
           ranges.push({
@@ -806,13 +808,19 @@
     slotModal.open = true;
     slotModal.contactId = contactId;
     slotModal.chosenDay = null;
-    slotModal.selected = preselectedSlots.map(slot => ({
+    const c = state.contacts.find(x => x.id === contactId);
+    const existingSelections = (c?.options || []).map(slot => ({
       startISO: slot.startISO,
       endISO: slot.endISO,
     }));
+    const combinedSelections = [...existingSelections, ...preselectedSlots].reduce((acc, slot) => {
+      if (!acc.some(existing => existing.startISO === slot.startISO)) acc.push(slot);
+      return acc;
+    }, []);
+    slotModal.selected = combinedSelections;
     slotModal.markConfirmed = false;
+    slotModal.originalStarts = new Set((c?.options || []).map(o => o.startISO));
 
-    const c = state.contacts.find(x => x.id === contactId);
     document.getElementById('slotModalTitle').textContent = c ? `Pick options for ${c.name}` : 'Pick options';
     updateWindowLabels();
     const timeStep = document.getElementById('timeStep');
@@ -906,7 +914,7 @@
     const grid = document.createElement('div');
     grid.className = 'gridTimes';
 
-    const blocked = getActiveRanges();
+    const blocked = getActiveRanges(slotModal.contactId);
 
     const day = slotModal.chosenDay;
     const { startMinutes, endMinutes } = getWindowConfig();
@@ -923,13 +931,13 @@
       btn.className = 'slotBtn';
       btn.textContent = `${fmtTime(start)}`;
       btn.disabled = false; // we allow selecting even if conflict? Better: disable
-      if (hasConflict) {
-        btn.disabled = true;
-        btn.title = 'Conflicts with an existing appointment option';
-      }
 
       const key = start.toISOString();
       const isSelected = slotModal.selected.some(x => x.startISO === key);
+      if (hasConflict && !isSelected) {
+        btn.disabled = true;
+        btn.title = 'Conflicts with an existing appointment option';
+      }
       if (isSelected) btn.classList.add('selected');
 
       btn.onclick = () => toggleSlot({ startISO: start.toISOString(), endISO: end.toISOString() }, btn);
@@ -1039,19 +1047,26 @@
 
     slotModal.markConfirmed = document.getElementById('slotModalConfirmToggle').checked;
 
-    // Avoid duplicates by start time
-    const existingStarts = new Set(c.options.map(o => o.startISO));
+    const selectedStarts = new Set(slotModal.selected.map(o => o.startISO));
+    const optionsToArchive = c.options.filter(o => !selectedStarts.has(o.startISO));
+    if (optionsToArchive.length) {
+      c.options = c.options.filter(o => selectedStarts.has(o.startISO));
+      const archivedAt = new Date().toISOString();
+      optionsToArchive.forEach(option => {
+        c.archivedOptions.push({ ...option, status: 'removed', archivedAt });
+      });
+    }
+
+    const existingOptions = new Map(c.options.map(o => [o.startISO, o]));
 
     slotModal.selected
       .slice()
       .sort((a,b) => new Date(a.startISO) - new Date(b.startISO))
       .forEach(slot => {
-        if (existingStarts.has(slot.startISO)) {
-          if (slotModal.markConfirmed) {
-            const existingOption = c.options.find(o => o.startISO === slot.startISO);
-            if (existingOption) {
-              confirmOption(c.id, existingOption.id, { silent: true });
-            }
+        const existingOption = existingOptions.get(slot.startISO);
+        if (existingOption) {
+          if (slotModal.markConfirmed && existingOption.status !== 'confirmed') {
+            confirmOption(c.id, existingOption.id, { silent: true });
           }
           return;
         }
