@@ -314,6 +314,8 @@
           </div>
         </div>
 
+        <div class="subtle" id="slotModalSuggested" style="margin-top:12px; display:none;"></div>
+
         <div class="hint" style="margin-top:10px;">Tip: You can open this picker anytime from the contact column header.</div>
       </div>
     </div>
@@ -605,6 +607,13 @@
     return `${dateLabel} ${timeLabel}`;
   }
 
+  function formatGermanSlotLabel(slot) {
+    const date = new Date(slot.startISO);
+    const weekday = date.toLocaleDateString('de-DE', { weekday: 'long' });
+    const timeLabel = date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+    return `${weekday} um ${timeLabel}`;
+  }
+
   function joinWithOr(items, locale) {
     if (items.length === 0) return '';
     if (items.length === 1) return items[0];
@@ -620,10 +629,10 @@
       .slice(0, 3);
 
     const enSlots = slots.map(slot => formatSlotLabel(slot, 'en-US'));
-    const deSlots = slots.map(slot => formatSlotLabel(slot, 'de-DE'));
+    const deSlots = slots.map(slot => formatGermanSlotLabel(slot));
 
     const english = `Do you happen to have time at ${joinWithOr(enSlots, 'en-US')}? If you do not, please suggest 2 dates between ${startLabel} and ${endLabel}.`;
-    const german = `Hätten Sie zufällig Zeit am ${joinWithOr(deSlots, 'de-DE')}? Falls nicht, schlagen Sie bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
+    const german = `Hättest du zufällig am ${joinWithOr(deSlots, 'de-DE')} Uhr Zeit? Falls nicht, schlagen Sie bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
 
     return { english, german };
   }
@@ -959,6 +968,36 @@
 
     document.getElementById('saveSelectionsBtn').textContent = `Add options (${slotModal.selected.length})`;
     document.getElementById('saveSelectionsBtn').disabled = slotModal.selected.length === 0;
+    updateSlotModalSuggested();
+  }
+
+  function getSlotModalSuggestedOptions() {
+    const c = state.contacts.find(x => x.id === slotModal.contactId);
+    if (!c) return [];
+    const merged = new Map();
+    (c.options || []).forEach(o => merged.set(o.startISO, o));
+    slotModal.selected.forEach(s => {
+      if (!merged.has(s.startISO)) merged.set(s.startISO, s);
+    });
+    return Array.from(merged.values());
+  }
+
+  function updateSlotModalSuggested() {
+    const container = document.getElementById('slotModalSuggested');
+    if (!container) return;
+    const options = getSlotModalSuggestedOptions();
+    if (options.length < 3) {
+      container.style.display = 'none';
+      container.innerHTML = '';
+      return;
+    }
+    const { english, german } = buildAvailabilityMessages(options);
+    container.style.display = 'block';
+    container.innerHTML = `
+      <div style="font-weight:800;">Suggested message (3 options selected)</div>
+      <div class="hint" style="margin-top:6px;"><b>EN:</b> ${escapeHtml(english)}</div>
+      <div class="hint" style="margin-top:6px;"><b>DE:</b> ${escapeHtml(german)}</div>
+    `;
   }
 
   function saveSelections() {
@@ -1368,20 +1407,6 @@
       `;
 
       list.appendChild(box);
-
-      if ((c.options || []).length >= 3) {
-        const messageWrap = document.createElement('div');
-        messageWrap.className = 'subtle';
-        messageWrap.style.marginTop = '10px';
-
-        const { english, german } = buildAvailabilityMessages(c.options);
-        messageWrap.innerHTML = `
-          <div style="font-weight:800;">Suggested message (3 options selected)</div>
-          <div class="hint" style="margin-top:6px;"><b>EN:</b> ${escapeHtml(english)}</div>
-          <div class="hint" style="margin-top:6px;"><b>DE:</b> ${escapeHtml(german)}</div>
-        `;
-        box.appendChild(messageWrap);
-      }
 
       if ((c.archivedOptions || []).length) {
         const archiveWrap = document.createElement('div');
