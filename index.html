@@ -495,9 +495,18 @@
     const email = prompt("Email (optional):") || "";
     const contact = { id: crypto.randomUUID(), name: name.trim(), email: email.trim(), options: [], archivedOptions: [] };
     state.contacts.push(contact);
+    const wantsAutoPick = confirm("Auto-pick 3 suggested options? (Next weekday, then every other day)");
+    if (wantsAutoPick) {
+      const addedCount = addAutoSuggestedOptions(contact.id);
+      if (addedCount === 0) {
+        alert("No free slots available for the suggested days. Please pick manually.");
+        openSlotModal(contact.id);
+      }
+    } else {
+      // Pop up slot picker right after adding
+      openSlotModal(contact.id);
+    }
     save();
-    // Pop up slot picker right after adding
-    openSlotModal(contact.id);
     render();
   }
 
@@ -659,6 +668,82 @@
       }
     }
     return slots;
+  }
+
+  function isSameDay(a, b) {
+    return toStartOfDay(a).getTime() === toStartOfDay(b).getTime();
+  }
+
+  function getAutoPickDays(count) {
+    const today = toStartOfDay(new Date());
+    const plannerEnd = addDays(startOfWeekMonday(today), PLANNER_WEEKS * 7 - 1);
+    const days = [];
+    let cursor = addDays(today, 1);
+    let lastPicked = null;
+    const minGapMs = 2 * 24 * 60 * 60 * 1000;
+
+    while (days.length < count && cursor <= plannerEnd) {
+      if (isWeekday(cursor)) {
+        if (!lastPicked || (toStartOfDay(cursor) - toStartOfDay(lastPicked)) >= minGapMs) {
+          days.push(new Date(cursor));
+          lastPicked = cursor;
+        }
+      }
+      cursor = addDays(cursor, 1);
+    }
+
+    return days;
+  }
+
+  function getFreeSlotsForDay(day) {
+    const blocked = getActiveRanges();
+    return getStandardSlots().filter(s => {
+      const start = new Date(s.startISO);
+      if (!isSameDay(start, day)) return false;
+      const end = new Date(s.endISO);
+      return !blocked.some(r => overlaps(start, end, r.start, r.end));
+    });
+  }
+
+  function pickSlotForDay(day, preference) {
+    const slots = getFreeSlotsForDay(day)
+      .slice()
+      .sort((a, b) => new Date(a.startISO) - new Date(b.startISO));
+    if (!slots.length) return null;
+
+    if (preference === 'early') return slots[0];
+    if (preference === 'late') return slots[slots.length - 1];
+    const midIndex = Math.floor(slots.length / 2);
+    return slots[midIndex];
+  }
+
+  function addAutoSuggestedOptions(contactId) {
+    const contact = state.contacts.find(x => x.id === contactId);
+    if (!contact) return 0;
+
+    const preferences = ['late', 'early', 'middle'];
+    const days = getAutoPickDays(3);
+    const existingStarts = new Set(contact.options.map(o => o.startISO));
+    const selectedSlots = [];
+
+    days.forEach((day, index) => {
+      const pref = preferences[index] || 'middle';
+      const slot = pickSlotForDay(day, pref);
+      if (!slot || existingStarts.has(slot.startISO)) return;
+      selectedSlots.push(slot);
+      existingStarts.add(slot.startISO);
+    });
+
+    selectedSlots.forEach(slot => {
+      contact.options.push({
+        id: crypto.randomUUID(),
+        startISO: slot.startISO,
+        endISO: slot.endISO,
+        status: 'proposed',
+      });
+    });
+
+    return selectedSlots.length;
   }
 
   // --- Slot Picker Modal ---
