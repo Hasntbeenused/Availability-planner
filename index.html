@@ -238,6 +238,19 @@
       font-weight: 600;
       margin-top: 4px;
     }
+
+    .messageRow {
+      display: flex;
+      gap: 8px;
+      align-items: flex-start;
+      justify-content: space-between;
+      flex-wrap: wrap;
+    }
+
+    .messageText {
+      flex: 1;
+      min-width: 220px;
+    }
   </style>
 </head>
 <body>
@@ -631,8 +644,8 @@
     const enSlots = slots.map(slot => formatSlotLabel(slot, 'en-US'));
     const deSlots = slots.map(slot => formatGermanSlotLabel(slot));
 
-    const english = `Do you happen to have time at ${joinWithOr(enSlots, 'en-US')}? If you do not, please suggest 2 dates between ${startLabel} and ${endLabel}.`;
-    const german = `Hättest du zufällig am ${joinWithOr(deSlots, 'de-DE')} Uhr Zeit? Falls nicht, schlagen Sie bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
+    const english = `Do you happen to have time on ${joinWithOr(enSlots, 'en-US')}? If not, please suggest 2 times between ${startLabel} and ${endLabel} (UK time).`;
+    const german = `Hättest du zufällig am ${joinWithOr(deSlots, 'de-DE')} Uhr Zeit? Falls nicht, schlag bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
 
     return { english, german };
   }
@@ -992,11 +1005,19 @@
       return;
     }
     const { english, german } = buildAvailabilityMessages(options);
+    const englishEncoded = encodeURIComponent(english);
+    const germanEncoded = encodeURIComponent(german);
     container.style.display = 'block';
     container.innerHTML = `
       <div style="font-weight:800;">Suggested message (3 options selected)</div>
-      <div class="hint" style="margin-top:6px;"><b>EN:</b> ${escapeHtml(english)}</div>
-      <div class="hint" style="margin-top:6px;"><b>DE:</b> ${escapeHtml(german)}</div>
+      <div class="hint messageRow" style="margin-top:6px;">
+        <span class="messageText"><b>EN:</b> ${escapeHtml(english)}</span>
+        <button class="small" onclick="copyMessage('${englishEncoded}')">Copy</button>
+      </div>
+      <div class="hint messageRow" style="margin-top:6px;">
+        <span class="messageText"><b>DE:</b> ${escapeHtml(german)}</span>
+        <button class="small" onclick="copyMessage('${germanEncoded}')">Copy</button>
+      </div>
     `;
   }
 
@@ -1469,6 +1490,27 @@
       .replaceAll('>', '&gt;')
       .replaceAll('"', '&quot;')
       .replaceAll("'", '&#39;');
+  }
+
+  async function copyToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+  }
+
+  function copyMessage(encoded) {
+    const text = decodeURIComponent(encoded);
+    copyToClipboard(text);
   }
 
   syncWindowInputs();
