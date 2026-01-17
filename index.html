@@ -598,6 +598,36 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
+  function formatSlotLabel(slot, locale) {
+    const date = new Date(slot.startISO);
+    const dateLabel = date.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: '2-digit' });
+    const timeLabel = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
+    return `${dateLabel} ${timeLabel}`;
+  }
+
+  function joinWithOr(items, locale) {
+    if (items.length === 0) return '';
+    if (items.length === 1) return items[0];
+    if (items.length === 2) return `${items[0]} ${locale === 'de-DE' ? 'oder' : 'or'} ${items[1]}`;
+    return `${items.slice(0, -1).join(', ')} ${locale === 'de-DE' ? 'oder' : 'or'} ${items[items.length - 1]}`;
+  }
+
+  function buildAvailabilityMessages(options) {
+    const { startLabel, endLabel } = getWindowConfig();
+    const slots = options
+      .slice()
+      .sort((a, b) => new Date(a.startISO) - new Date(b.startISO))
+      .slice(0, 3);
+
+    const enSlots = slots.map(slot => formatSlotLabel(slot, 'en-US'));
+    const deSlots = slots.map(slot => formatSlotLabel(slot, 'de-DE'));
+
+    const english = `Do you happen to have time at ${joinWithOr(enSlots, 'en-US')}? If you do not, please suggest 2 dates between ${startLabel} and ${endLabel}.`;
+    const german = `Hätten Sie zufällig Zeit am ${joinWithOr(deSlots, 'de-DE')}? Falls nicht, schlagen Sie bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
+
+    return { english, german };
+  }
+
   function overlaps(aStart, aEnd, bStart, bEnd) {
     return aStart < bEnd && bStart < aEnd;
   }
@@ -1338,6 +1368,20 @@
       `;
 
       list.appendChild(box);
+
+      if ((c.options || []).length >= 3) {
+        const messageWrap = document.createElement('div');
+        messageWrap.className = 'subtle';
+        messageWrap.style.marginTop = '10px';
+
+        const { english, german } = buildAvailabilityMessages(c.options);
+        messageWrap.innerHTML = `
+          <div style="font-weight:800;">Suggested message (3 options selected)</div>
+          <div class="hint" style="margin-top:6px;"><b>EN:</b> ${escapeHtml(english)}</div>
+          <div class="hint" style="margin-top:6px;"><b>DE:</b> ${escapeHtml(german)}</div>
+        `;
+        box.appendChild(messageWrap);
+      }
 
       if ((c.archivedOptions || []).length) {
         const archiveWrap = document.createElement('div');
