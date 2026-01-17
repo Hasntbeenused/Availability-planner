@@ -613,8 +613,11 @@
     return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
   }
 
-  function formatSlotLabel(slot, locale) {
+  function formatSlotLabel(slot, locale, offsetMinutes = 0) {
     const date = new Date(slot.startISO);
+    if (offsetMinutes) {
+      date.setMinutes(date.getMinutes() + offsetMinutes);
+    }
     const dateLabel = date.toLocaleDateString(locale, { weekday: 'short', month: 'short', day: '2-digit' });
     const timeLabel = date.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' });
     return `${dateLabel} ${timeLabel}`;
@@ -634,6 +637,13 @@
     return `${items.slice(0, -1).join(', ')} ${locale === 'de-DE' ? 'oder' : 'or'} ${items[items.length - 1]}`;
   }
 
+  function shiftTimeLabel(label, offsetMinutes) {
+    const minutes = parseTimeToMinutes(label);
+    if (Number.isNaN(minutes)) return label;
+    const normalized = ((minutes + offsetMinutes) % 1440 + 1440) % 1440;
+    return minutesToTime(normalized);
+  }
+
   function buildAvailabilityMessages(options) {
     const { startLabel, endLabel } = getWindowConfig();
     const slots = options
@@ -641,10 +651,12 @@
       .sort((a, b) => new Date(a.startISO) - new Date(b.startISO))
       .slice(0, 3);
 
-    const enSlots = slots.map(slot => formatSlotLabel(slot, 'en-US'));
+    const enSlots = slots.map(slot => formatSlotLabel(slot, 'en-US', -60));
     const deSlots = slots.map(slot => formatGermanSlotLabel(slot));
 
-    const english = `Do you happen to have time on ${joinWithOr(enSlots, 'en-US')}? If not, please suggest 2 times between ${startLabel} and ${endLabel} (UK time).`;
+    const englishStart = shiftTimeLabel(startLabel, -60);
+    const englishEnd = shiftTimeLabel(endLabel, -60);
+    const english = `Do you happen to have time on ${joinWithOr(enSlots, 'en-US')}? If not, please suggest 2 times between ${englishStart} and ${englishEnd} (UK time).`;
     const german = `Hättest du zufällig am ${joinWithOr(deSlots, 'de-DE')} Uhr Zeit? Falls nicht, schlag bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
 
     return { english, german };
