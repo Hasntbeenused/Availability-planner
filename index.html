@@ -497,11 +497,11 @@
     state.contacts.push(contact);
     const wantsAutoPick = confirm("Auto-pick 3 suggested options? (Next weekday, then every other day)");
     if (wantsAutoPick) {
-      const addedCount = addAutoSuggestedOptions(contact.id);
-      if (addedCount === 0) {
+      const suggestedSlots = getAutoSuggestedSlots(contact.id, 3);
+      if (suggestedSlots.length === 0) {
         alert("No free slots available for the suggested days. Please pick manually.");
-        openSlotModal(contact.id);
       }
+      openSlotModal(contact.id, suggestedSlots);
     } else {
       // Pop up slot picker right after adding
       openSlotModal(contact.id);
@@ -717,12 +717,12 @@
     return slots[midIndex];
   }
 
-  function addAutoSuggestedOptions(contactId) {
+  function getAutoSuggestedSlots(contactId, count) {
     const contact = state.contacts.find(x => x.id === contactId);
-    if (!contact) return 0;
+    if (!contact) return [];
 
     const preferences = ['late', 'early', 'middle'];
-    const days = getAutoPickDays(3);
+    const days = getAutoPickDays(count);
     const existingStarts = new Set(contact.options.map(o => o.startISO));
     const selectedSlots = [];
 
@@ -730,37 +730,42 @@
       const pref = preferences[index] || 'middle';
       const slot = pickSlotForDay(day, pref);
       if (!slot || existingStarts.has(slot.startISO)) return;
-      selectedSlots.push(slot);
+      selectedSlots.push({ startISO: slot.startISO, endISO: slot.endISO });
       existingStarts.add(slot.startISO);
     });
 
-    selectedSlots.forEach(slot => {
-      contact.options.push({
-        id: crypto.randomUUID(),
-        startISO: slot.startISO,
-        endISO: slot.endISO,
-        status: 'proposed',
-      });
-    });
-
-    return selectedSlots.length;
+    return selectedSlots;
   }
 
   // --- Slot Picker Modal ---
-  function openSlotModal(contactId) {
+  function openSlotModal(contactId, preselectedSlots = []) {
     slotModal.open = true;
     slotModal.contactId = contactId;
     slotModal.chosenDay = null;
-    slotModal.selected = [];
+    slotModal.selected = preselectedSlots.map(slot => ({
+      startISO: slot.startISO,
+      endISO: slot.endISO,
+    }));
     slotModal.markConfirmed = false;
 
     const c = state.contacts.find(x => x.id === contactId);
     document.getElementById('slotModalTitle').textContent = c ? `Pick options for ${c.name}` : 'Pick options';
     updateWindowLabels();
-    document.getElementById('timeStep').style.display = 'none';
+    const timeStep = document.getElementById('timeStep');
+    if (slotModal.selected.length) {
+      const firstDay = toStartOfDay(new Date(slotModal.selected[0].startISO));
+      slotModal.chosenDay = firstDay;
+      timeStep.style.display = 'block';
+      document.getElementById('pickedDayLabel').textContent = `Chosen: ${firstDay.toLocaleDateString(undefined, { weekday:'long', year:'numeric', month:'short', day:'2-digit' })}`;
+    } else {
+      timeStep.style.display = 'none';
+    }
     document.getElementById('slotModalConfirmToggle').checked = false;
 
     renderDayPicker();
+    if (slotModal.chosenDay) {
+      renderTimePicker();
+    }
     renderSelectedChips();
 
     document.getElementById('slotModalOverlay').style.display = 'flex';
