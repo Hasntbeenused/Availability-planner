@@ -79,6 +79,15 @@
 
     .scroll-x { overflow-x: auto; }
 
+    .calendar-scrollbar {
+      height: 14px;
+      margin-bottom: 8px;
+    }
+
+    .calendar-scrollbar__spacer {
+      height: 1px;
+    }
+
     table {
       border-collapse: collapse;
       width: 100%;
@@ -1242,7 +1251,7 @@
 
   function renderCalendar(root, contacts) {
     const card = document.createElement('div');
-    card.className = 'card scroll-x';
+    card.className = 'card';
 
     const table = document.createElement('table');
 
@@ -1347,7 +1356,33 @@
       table.appendChild(tr);
     }
 
-    card.appendChild(table);
+    const topScroll = document.createElement('div');
+    topScroll.className = 'calendar-scrollbar scroll-x';
+    const spacer = document.createElement('div');
+    spacer.className = 'calendar-scrollbar__spacer';
+    topScroll.appendChild(spacer);
+
+    const tableWrap = document.createElement('div');
+    tableWrap.className = 'scroll-x';
+    tableWrap.appendChild(table);
+
+    topScroll.addEventListener('scroll', () => {
+      if (tableWrap.scrollLeft !== topScroll.scrollLeft) {
+        tableWrap.scrollLeft = topScroll.scrollLeft;
+      }
+    });
+    tableWrap.addEventListener('scroll', () => {
+      if (topScroll.scrollLeft !== tableWrap.scrollLeft) {
+        topScroll.scrollLeft = tableWrap.scrollLeft;
+      }
+    });
+
+    requestAnimationFrame(() => {
+      spacer.style.width = `${table.scrollWidth}px`;
+    });
+
+    card.appendChild(topScroll);
+    card.appendChild(tableWrap);
 
     const note = document.createElement('div');
     note.className = 'hint';
