@@ -735,8 +735,9 @@
     const englishEnd = shiftTimeLabel(endLabel, -60);
     const english = `Do you happen to have time on ${joinWithOr(enSlots, 'en-US')}? If not, please suggest 2 times between ${englishStart} and ${englishEnd} (UK time).`;
     const german = `Hättest du zufällig am ${joinWithOr(deSlots, 'de-DE')} Uhr Zeit? Falls nicht, schlag bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
+    const germanFormal = `Hätten Sie zufällig am ${joinWithOr(deSlots, 'de-DE')} Uhr Zeit? Falls nicht, schlagen Sie bitte 2 Termine zwischen ${startLabel} und ${endLabel} vor.`;
 
-    return { english, german };
+    return { english, german, germanFormal };
   }
 
   function overlaps(aStart, aEnd, bStart, bEnd) {
@@ -1100,9 +1101,10 @@
       container.innerHTML = '';
       return;
     }
-    const { english, german } = buildAvailabilityMessages(options);
+    const { english, german, germanFormal } = buildAvailabilityMessages(options);
     const englishEncoded = encodeURIComponent(english);
     const germanEncoded = encodeURIComponent(german);
+    const germanFormalEncoded = encodeURIComponent(germanFormal);
     container.style.display = 'block';
     container.innerHTML = `
       <div style="font-weight:800;">Suggested message (3 options selected)</div>
@@ -1113,6 +1115,10 @@
       <div class="hint messageRow" style="margin-top:6px;">
         <span class="messageText"><b>DE:</b> ${escapeHtml(german)}</span>
         <button class="small" onclick="copyMessage('${germanEncoded}')">Copy</button>
+      </div>
+      <div class="hint messageRow" style="margin-top:6px;">
+        <span class="messageText"><b>DE (Sie):</b> ${escapeHtml(germanFormal)}</span>
+        <button class="small" onclick="copyMessage('${germanFormalEncoded}')">Copy</button>
       </div>
     `;
   }
